@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "iron",
+    "baselib",
+]
+resolver = "2"
