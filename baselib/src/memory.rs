@@ -9,6 +9,8 @@ use crate::common::*;
 pub use crate::arch::x86::vmem32::*;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86::vmem64::*;
+#[cfg(target_arch = "aarch64")]
+pub use crate::arch::aarch64::vmem64::*;
 
 // CONSTANTS
 pub const MEMORY_TYPE_BOOT_FRAMER: u32 = 0x80015225;
@@ -81,7 +83,19 @@ pub trait Align: Bitmask + Sized + PartialEq + HasAsUsize {
     }
 
     fn is_aligned_4k(&self) -> bool {
-        let x = self.bitmask(ALIGN_MASK_4K).as_usize();
+        let x = self.align_4k().as_usize();
+        let y = self.as_usize();
+        x == y
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn align_16k(&self) -> Self {
+        self.bitmask(ALIGN_MASK_16K)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn is_aligned_16k(&self) -> bool {
+        let x = self.align_16k().as_usize();
         let y = self.as_usize();
         x == y
     }
@@ -93,7 +107,7 @@ pub trait Align: Bitmask + Sized + PartialEq + HasAsUsize {
 
     #[cfg(target_arch = "x86_64")]
     fn is_aligned_2m(&self) -> bool {
-        let x = self.bitmask(ALIGN_MASK_2M).as_usize();
+        let x = self.align_2m().as_usize();
         let y = self.as_usize();
         x == y
     }
@@ -105,11 +119,23 @@ pub trait Align: Bitmask + Sized + PartialEq + HasAsUsize {
 
     #[cfg(target_arch = "x86")]
     fn is_aligned_4m(&self) -> bool {
-        let x = self.bitmask(ALIGN_MASK_4M).as_usize();
+        let x = self.align_4m().as_usize();
         let y = self.as_usize();
         x == y
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn align_64k(&self) -> Self {
+        self.bitmask(ALIGN_MASK_64K)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn is_aligned_64k(&self) -> bool {
+        let x = self.align_64k().as_usize();
+        let y = self.as_usize();
+        x == y
+    }
+    
     #[cfg(target_arch = "x86_64")]
     fn align_1g(&self) -> Self {
         self.bitmask(ALIGN_MASK_1G)
@@ -117,7 +143,7 @@ pub trait Align: Bitmask + Sized + PartialEq + HasAsUsize {
 
     #[cfg(target_arch = "x86_64")]
     fn is_aligned_1g(&self) -> bool {
-        let x = self.bitmask(ALIGN_MASK_1G).as_usize();
+        let x = self.align_1g().as_usize();
         let y = self.as_usize();
         x == y
     }
@@ -430,8 +456,8 @@ impl<T: MemAddr + Align + Copy> MemoryUnit<T> {
 }
 pub const MEMORY_ALLOCATIONS_TRACKED_PER_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / mem::size_of::<MemoryUnit<PhysAddr>>();
 
-pub const fn calc_pages_reqd(size: usize) -> usize {
-    (size + MEMORY_DEFAULT_PAGE_USIZE - 1) / MEMORY_DEFAULT_PAGE_USIZE
+pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
+    (size + page_size.into_bits() - 1) / page_size.into_bits()
 }
 
 #[repr(u8)]

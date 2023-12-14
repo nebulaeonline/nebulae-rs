@@ -214,7 +214,7 @@ impl PageDir for BasePageTable {
     }
 
     fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, page_size: PageSize) {
-        let page_count = calc_pages_reqd(size);
+        let page_count = calc_pages_reqd(size, PageSize::Small);
         let mut cv: VirtAddr = v;
 
         for _i in 0..page_count {
@@ -285,7 +285,7 @@ impl PageDir for BasePageTable {
     }
 
     fn alloc_pages(&mut self, size: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr> {
-        let size_in_pages = calc_pages_reqd(size);
+        let size_in_pages = calc_pages_reqd(size, PageSize::Small);
         let mut allocated_pages: usize = 0;
 
         for i in 0..size_in_pages {
@@ -322,7 +322,7 @@ impl PageDir for BasePageTable {
 
     fn alloc_pages_contiguous(&mut self, size: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr> {
             
-        let size_in_pages = calc_pages_reqd(size);
+        let size_in_pages = calc_pages_reqd(size, PageSize::Small);
         let page_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_contiguous(size) };
         if page_base.is_some() {            
             for i in 0..size_in_pages {

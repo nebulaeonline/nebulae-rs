@@ -4,7 +4,7 @@ use crate::bitmap::*;
 
 use core::alloc::{GlobalAlloc, Layout};
 
-trait IronAllocator {
+trait SubAllocator {
     fn internal_alloc(&self, layout: Layout) -> Option<VirtAddr>;
     fn internal_dealloc(&self, ptr: *mut u8, layout: Layout) -> bool;
     fn internal_alloc_zeroed(&self, layout: Layout) -> Option<VirtAddr>;
@@ -25,6 +25,11 @@ pub struct MemoryPool {
 }
 impl MemoryPool {
     #[inline(always)]
+    pub fn calc_bitmap_size_in_pages(capacity: usize) -> usize {
+        Bitmap::calc_size_in_pages(capacity, PageSize::Small)
+    }
+
+    #[inline(always)]
     pub fn calc_bitmap_size_in_uintn(capacity: usize) -> usize {
         Bitmap::calc_size_in_uintn(capacity)
     }
@@ -32,6 +37,11 @@ impl MemoryPool {
     #[inline(always)]
     pub fn calc_size_in_bytes(capacity: usize, block_size: usize) -> usize {
         block_size * capacity
+    }
+
+    #[inline(always)]
+    pub fn calc_size_in_pages(capacity: usize, block_size: usize, page_size: PageSize) -> usize {
+        calc_pages_reqd(capacity * block_size, page_size)
     }
 
     pub fn new(name: &'static str, block_size: usize, capacity: usize, start: VirtAddr, bitmap_start: VirtAddr) -> Self {
@@ -102,7 +112,7 @@ impl Drop for MemoryPool {
     }
 }
 
-impl IronAllocator for MemoryPool {
+impl SubAllocator for MemoryPool {
     fn internal_alloc(&self, layout: Layout) -> Option<VirtAddr> {
         if layout.size() > self.block_size {
             return None;

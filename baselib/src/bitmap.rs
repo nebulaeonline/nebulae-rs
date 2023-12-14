@@ -15,7 +15,7 @@ pub trait BitmapOps {
     fn size_in_bytes(&self) -> usize;
 
     fn calc_size_in_uintn(capacity: usize) -> usize;
-    fn calc_size_in_default_pages(capacity: usize) -> usize;
+    fn calc_size_in_pages(capacity: usize, page_size: PageSize) -> usize;
     fn calc_item_index(item: usize) -> usize;
     fn calc_item_bit_index(item: usize) -> usize;
 
@@ -79,7 +79,7 @@ impl Drop for Bitmap {
                 .dealloc_pages_contiguous(ptr_to_addr::<Uintn, VirtAddr>(self.bitmap.get() as *const Uintn), self.size_in_pages.get(), PageSize::Small); 
             }
             self.bitmap.set(ptr::null_mut());
-        }
+        }        
     }
 }
 impl BitmapOps for Bitmap {
@@ -104,7 +104,7 @@ impl BitmapOps for Bitmap {
 
         // calculate the size in bytes and pages
         let size_in_bytes = size_in_uintn * MACHINE_UBYTES;
-        let size_in_pages = calc_pages_reqd(size_in_bytes);
+        let size_in_pages = calc_pages_reqd(size_in_bytes, PageSize::Small);
 
         // if the pre-allocated base is 0, that means we need to allocate directly from the
         // frame allocator; if it's not 0, then the memory has already been allocated for us
@@ -208,8 +208,8 @@ impl BitmapOps for Bitmap {
     }
 
     #[inline(always)]
-    fn calc_size_in_default_pages(capacity: usize) -> usize {
-        let uintn_per_page = MEMORY_DEFAULT_PAGE_USIZE / MACHINE_UBYTES;
+    fn calc_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
+        let uintn_per_page = page_size.into_bits() / MACHINE_UBYTES;
         Bitmap::calc_size_in_uintn(capacity) / uintn_per_page
     }
 

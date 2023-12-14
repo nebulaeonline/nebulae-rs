@@ -96,7 +96,7 @@ impl FrameAllocator {
         #[cfg(debug_assertions)]
         serial_println!("max conventional address: 0x{:0x}", max_phys_present);
 
-        let max_phys_uintn_idx = calc_pages_reqd(max_phys_present) / MACHINE_UBITS;
+        let max_phys_uintn_idx = calc_pages_reqd(max_phys_present, PageSize::Small) / MACHINE_UBITS;
         
         #[cfg(debug_assertions)]
         serial_println!("max physical bitmap index: 0x{:0x}", max_phys_uintn_idx);
@@ -116,7 +116,7 @@ impl FrameAllocator {
         serial_println!("allocating memory for physical frame allocator");
 
         // pages req'd for bitmap = pages to cover physical memory / bits per Uintn
-        let pages_reqd = Bitmap::calc_size_in_default_pages(calc_pages_reqd(max_phys_present));
+        let pages_reqd = Bitmap::calc_size_in_pages(calc_pages_reqd(max_phys_present, PageSize::Small), PageSize::Small);
 
         // Allocate memory for the bitmap using UEFI allocate_pages.
         let result = unsafe { UEFI_SYSTEM_TABLE_0.lock().as_ref().unwrap().boot_services().allocate_pages(
@@ -205,7 +205,7 @@ impl FrameAllocator {
     }
 
     pub fn alloc_contiguous(&mut self, size: usize) -> Option<PhysAddr> {
-        let page_count = calc_pages_reqd(size);
+        let page_count = calc_pages_reqd(size, PageSize::Small);
         let frame_base = self.bitmap.find_first_set_region(page_count);
         
         match frame_base {
@@ -221,7 +221,7 @@ impl FrameAllocator {
 
     pub fn alloc_contiguous_page_aligned(&mut self, size: usize, page_size: PageSize) -> Option<PhysAddr> {
         let mut current_page_idx = 0usize;
-        let reqd_page_count = calc_pages_reqd(size);
+        let reqd_page_count = calc_pages_reqd(size, PageSize::Small);
         let max_phys_idx = unsafe { PHYS_MEM_MAX_UINTN_IDX_2.lock().as_ref().unwrap().clone() };
 
         while current_page_idx <= max_phys_idx
@@ -245,7 +245,7 @@ impl FrameAllocator {
     }
 
     pub fn dealloc_contiguous(&mut self, page_base: PhysAddr, size: usize) {
-        let page_count = calc_pages_reqd(size);
+        let page_count = calc_pages_reqd(size, PageSize::Small);
         let start_idx = page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE;
         self.bitmap.set_range(start_idx, start_idx + page_count);
     }

@@ -28,10 +28,10 @@ pub mod arch {
         pub mod asm;
         pub mod serial;
         pub mod cpu;
+        pub mod vmem64;
         pub mod async_exception;
         pub mod exception;
 
-        #[cfg(target_arch = "aarch64")]
         pub mod constants;
     }
 

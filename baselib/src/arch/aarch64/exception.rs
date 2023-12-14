@@ -14,7 +14,7 @@
 use aarch64_cpu::{asm::barrier, registers::*};
 use core::{arch::global_asm, cell::UnsafeCell, fmt};
 use tock_registers::{
-    interfaces::{Readable, WRITABLE},
+    interfaces::{Readable, Writeable},
     registers::InMemoryRegister,
 };
 
