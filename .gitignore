@@ -1,5 +1,6 @@
 # Compiled files
 /target/
+/build/*
 
 # Dependency directories
 Cargo.lock
