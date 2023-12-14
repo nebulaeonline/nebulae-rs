@@ -1,4 +1,4 @@
-# nebulae
+# nebulae-rs
 
 ### Update
 Well, it's that time again.
