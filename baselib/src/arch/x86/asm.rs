@@ -737,7 +737,7 @@ pub fn x86_cpuid(mode: u32) -> CpuidRegs {
             "cpuid",
             "mov ecx, ebx",
             "pop ebx",
-            inout("eax") mode => regs.eax,
+            in("eax") regs.eax,
             lateout("ecx") regs.ebx,
             options(nomem),
         );
@@ -788,7 +788,7 @@ pub fn x86_cpuid_ext(mode: u32, param: u32) -> CpuidRegs {
             "cpuid",
             "mov ecx, ebx",
             "pop ebx",
-            inout("eax") mode => regs.eax,
+            in("eax") mode,
             inout("ecx") param => regs.ebx,
             options(nomem),
         );

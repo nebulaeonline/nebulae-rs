@@ -217,3 +217,7 @@ pub use crate::arch::x86::constants_x32::*;
 pub use crate::arch::x86::constants_x64::*;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::constants::*;
+
+pub const KERNEL_STACK_SIZE_SMALL: usize = USIZE_256K;
+pub const KERNEL_STACK_SIZE_MED: usize = USIZE_1M;
+pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_8M;

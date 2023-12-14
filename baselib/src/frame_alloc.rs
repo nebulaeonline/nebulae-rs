@@ -20,15 +20,33 @@ use core::ops::Range;
 pub struct FrameAllocator {
     bitmap: Bitmap,
     buffer: *mut [u8; 2 * MEMORY_DEFAULT_PAGE_USIZE],
+    buffer_allocated: bool,
 }
 
 impl FrameAllocator {
     
     pub fn new() -> Self {
         Self {
-            buffer: ptr::null_mut(),
             bitmap: Bitmap::new(),
+            buffer: ptr::null_mut(),
+            buffer_allocated: false,
         }
+    }
+
+    pub fn dealloc_buffer(&mut self) {
+        match self.buffer_allocated {
+            true => {
+                let buf_phys = ptr_mut_to_addr::<[u8; 2 * MEMORY_DEFAULT_PAGE_USIZE], PhysAddr>(self.buffer);
+
+                // dealloc the pages
+                unsafe { KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
+                    .dealloc_pages_contiguous(buf_phys.into(), USIZE_8K, PageSize::Small); }
+            },
+            false => {
+                return;
+            }
+        }
+        self.buffer = ptr::null_mut();
     }
 
     // at this point we are still in uefi boot services mode
@@ -186,7 +204,8 @@ impl FrameAllocator {
         self.bitmap.bit_set_count()
     }
 
-    pub fn alloc_contiguous(&mut self, page_count: usize) -> Option<PhysAddr> {
+    pub fn alloc_contiguous(&mut self, size: usize) -> Option<PhysAddr> {
+        let page_count = calc_pages_reqd(size);
         let frame_base = self.bitmap.find_first_set_region(page_count);
         
         match frame_base {
@@ -200,9 +219,9 @@ impl FrameAllocator {
         }
     }
 
-    pub fn alloc_contiguous_page_aligned(&mut self, page_size: PageSize) -> Option<PhysAddr> {
+    pub fn alloc_contiguous_page_aligned(&mut self, size: usize, page_size: PageSize) -> Option<PhysAddr> {
         let mut current_page_idx = 0usize;
-        let reqd_page_count = calc_pages_reqd(page_size.into_bits());
+        let reqd_page_count = calc_pages_reqd(size);
         let max_phys_idx = unsafe { PHYS_MEM_MAX_UINTN_IDX_2.lock().as_ref().unwrap().clone() };
 
         while current_page_idx <= max_phys_idx
@@ -225,7 +244,8 @@ impl FrameAllocator {
         None
     }
 
-    pub fn dealloc_contiguous(&mut self, page_base: PhysAddr, page_count: usize) {
+    pub fn dealloc_contiguous(&mut self, page_base: PhysAddr, size: usize) {
+        let page_count = calc_pages_reqd(size);
         let start_idx = page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE;
         self.bitmap.set_range(start_idx, start_idx + page_count);
     }

@@ -332,6 +332,22 @@ impl PageDir for BasePageTable {
         Some(v)
     }
 
+    fn dealloc_page(&mut self, v: VirtAddr, page_size: PageSize) {
+        self.unmap_page(v, page_size);
+        unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(self.virt_to_phys(v)); }
+    }
+
+    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, page_size: PageSize) {
+        let page_count = calc_pages_reqd(size);
+        let mut cv: VirtAddr = v;
+
+        for _i in 0..page_count {
+            self.unmap_page(cv, page_size);
+            unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(self.virt_to_phys(cv)); }
+            cv.inner_inc_by_page_size(page_size);
+        }
+    }
+
     fn unmap_page(&mut self, v: VirtAddr, size: PageSize) {
         let (pml4_idx, pdpt_idx, pd_idx, pt_idx) = v.get_page_table_indexes();
 
@@ -447,20 +463,24 @@ impl PageDir for BasePageTable {
         self.map_page(p, VirtAddr(p.align_4k().as_usize()), size, flags);
     }
 
-    fn alloc_page(&mut self, v: VirtAddr, size: PageSize, flags: usize) -> VirtAddr {
+    fn alloc_page(&mut self, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> VirtAddr {
         let new_page_frame_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page() };
             
         // Looks like we were not able to obtain a page
         if new_page_frame_base.is_none() { return VirtAddr(0); }
 
         // Map the new page frame to where it was requested
-        self.map_page(new_page_frame_base.unwrap(), v, size, flags);
+        self.map_page(new_page_frame_base.unwrap(), v, page_size, flags);
 
+        // fill the allocated memory with the bit pattern
+        unsafe { ptr::write_bytes(addr_to_ptr_mut::<u8, VirtAddr>(v), bit_pattern.into_bits(), page_size.into_bits()); }
+        
         // Return the virtual address of the new page frame
         v
     }
 
-    fn alloc_pages(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize) -> Option<VirtAddr> {
+    fn alloc_pages(&mut self, size: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr> {
+        let size_in_pages = calc_pages_reqd(size);
         let mut allocated_pages: usize = 0;
 
         for i in 0..size_in_pages {
@@ -488,37 +508,32 @@ impl PageDir for BasePageTable {
             }
         }
 
+        // fill the allocated memory with the bit pattern
+        for _j in 0..allocated_pages {
+            unsafe { ptr::write_bytes(addr_to_ptr_mut::<u8, VirtAddr>(v), bit_pattern.into_bits(), page_size.into_bits()); }
+        }        
         Some(v)
     }
 
-    fn alloc_pages_contiguous(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize) -> Option<VirtAddr> {
-        let mut allocated_pages: usize = 0;
-
-        for i in 0..size_in_pages {
-            let page_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page() };
-            if page_base.is_some() {
-                allocated_pages += 1;
-
+    fn alloc_pages_contiguous(&mut self, size: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr> {
+            
+        let size_in_pages = calc_pages_reqd(size);
+        let page_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_contiguous(size) };
+        if page_base.is_some() {            
+            for i in 0..size_in_pages {
                 self.map_page(page_base.unwrap(), 
                     VirtAddr(v.as_usize() + (i * page_size.into_bits())), 
                     page_size, 
                     flags
                 ); 
-            } else {
-                // we need to deallocate and unmap any pages that failed and return failure
-                let mut cv: VirtAddr = v;
-
-                for _j in 0..allocated_pages {
-                    self.unmap_page(cv, page_size); 
-                    unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(self.virt_to_phys(cv)); }
-                    
-                    cv.inner_inc_by_default_page_size();
-                }
-
-                return None;
             }
+        } else {
+            return None;
         }
 
-        Some(v)
+        // fill the allocated memory with the bit pattern
+        unsafe { ptr::write_bytes(addr_to_ptr_mut::<u8, VirtAddr>(v), bit_pattern.into_bits(), size); }
+
+        Some(v)     
     }
 }

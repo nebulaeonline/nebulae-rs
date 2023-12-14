@@ -13,9 +13,7 @@ pub use crate::memory::*;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub use crate::interrupts::*;
 
-pub const KERNEL_STACK_SIZE_SMALL: usize = USIZE_256K;
-pub const KERNEL_STACK_SIZE_MED: usize = USIZE_1M;
-pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_8M;
+pub const NEBULAE: usize = 0x5225;
 
 // STATICS
 

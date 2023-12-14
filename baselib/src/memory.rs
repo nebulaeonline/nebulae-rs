@@ -275,6 +275,14 @@ impl VirtAddr {
     pub fn inner_dec_by_default_page_size(&mut self) {
         self.0 -= MEMORY_DEFAULT_PAGE_USIZE;
     }
+
+    pub fn inner_inc_by_page_size(&mut self, page_size: PageSize) {
+        self.0 += page_size.into_bits();
+    }
+
+    pub fn inner_dec_by_page_size(&mut self, page_size: PageSize) {
+        self.0 -= page_size.into_bits();
+    }
 }
 
 impl Bitmask for VirtAddr {
@@ -356,21 +364,97 @@ pub trait PageDir {
     fn virt_to_phys(&self, vaddr: VirtAddr) -> PhysAddr;
     fn map_page(&mut self, paddr: PhysAddr, vaddr: VirtAddr, page_size: PageSize, flags: usize) -> Option<VirtAddr>;
     fn unmap_page(&mut self, vaddr: VirtAddr, page_size: PageSize);
+    fn dealloc_page(&mut self, vaddr: VirtAddr, page_size: PageSize);
+    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, page_size: PageSize);
     fn identity_map_page(&mut self, paddr: PhysAddr, page_size: PageSize, flags: usize);
-    fn alloc_page(&mut self, v: VirtAddr, size: PageSize, flags: usize) -> VirtAddr;
-    fn alloc_pages(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize) -> Option<VirtAddr>;
-    fn alloc_pages_contiguous(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize) -> Option<VirtAddr>;
+    fn alloc_page(&mut self, v: VirtAddr, size: PageSize, flags: usize, bit_pattern: BitPattern) -> VirtAddr;
+    fn alloc_pages(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr>;
+    fn alloc_pages_contiguous(&mut self, size_in_pages: usize, v: VirtAddr, page_size: PageSize, flags: usize, bit_pattern: BitPattern) -> Option<VirtAddr>;
 }
 
 // Common for tracking allocations / deallocations
 #[derive(Debug)]
-pub struct MemoryAllocationUnit {
-    pub base: VirtAddr,
+pub struct MemoryUnit<T: MemAddr + Align + Copy> {
+    pub base: T,
     pub size: usize,
 }
+impl<T: MemAddr + Align + Copy> MemoryUnit<T> {
+    pub fn new() -> Self {
+        Self {
+            base: T::new(),
+            size: 0,
+        }
+    }
 
-pub const MEMORY_ALLOCATIONS_TRACKED_PER_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / mem::size_of::<MemoryAllocationUnit>();
+    pub fn new_from(item: Self) -> Self {
+        Self {
+            base: item.base,
+            size: item.size,
+        }
+    }
+
+    pub fn new_with(base: impl MemAddr, size: usize) -> Self {
+        Self {
+            base: T::new_from_usize(base.as_usize()),
+            size: size,
+        }
+    }
+
+    pub fn is_addr_page_aligned(&self, page_size: PageSize) -> bool {
+        match page_size {
+            PageSize::Small => self.base.is_aligned_4k(),
+            #[cfg(target_arch = "aarch64")]
+            PageSize::Medium => self.base.is_aligned_16k(),
+            #[cfg(target_arch = "x86")]
+            PageSize::Medium => self.base.is_aligned_4m(),
+            #[cfg(target_arch = "x86_64")]
+            PageSize::Medium => self.base.is_aligned_2m(),
+            #[cfg(target_arch = "aarch64")]
+            PageSize::Large => self.base.is_aligned_64k(),
+            #[cfg(target_arch = "x86_64")]
+            PageSize::Huge => self.base.is_aligned_1g(),
+        }
+    }
+
+    pub fn page_count(&self, page_size: PageSize) -> usize {
+        if self.is_addr_page_aligned(page_size) {
+            self.size / page_size.into_bits()
+        } else {
+            self.size / page_size.into_bits() + 1
+        }
+    }    
+
+    pub fn max_addr(&self) -> usize {
+        self.base.as_usize() + self.size - 1
+    }
+}
+pub const MEMORY_ALLOCATIONS_TRACKED_PER_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / mem::size_of::<MemoryUnit<PhysAddr>>();
 
 pub const fn calc_pages_reqd(size: usize) -> usize {
     (size + MEMORY_DEFAULT_PAGE_USIZE - 1) / MEMORY_DEFAULT_PAGE_USIZE
+}
+
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BitPattern {
+    ZeroZero = 0u8,
+    Custom(u8),
+    FF = u8::MAX,
+}
+impl BitPattern {
+    pub const fn into_bits(self) -> u8 {
+        match self {
+            BitPattern::ZeroZero => 0,
+            BitPattern::FF => u8::MAX,
+            BitPattern::Custom(x) => x,
+        }
+    }
+
+    pub const fn from_bits(value: u8) -> Self {
+        match value {
+            0 => BitPattern::ZeroZero,
+            u8::MAX => BitPattern::FF,
+            _ => BitPattern::Custom(value),
+        }
+    }
 }
