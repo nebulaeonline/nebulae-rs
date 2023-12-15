@@ -1,6 +1,11 @@
 # nebulae-rs
 
-### Update
+### Current Status
+
+As of right now, I've done some tidying up in anticipation of some upgrading.  I am solely focusing on the memory management system at the moment. I hope to have it tied together with some aarch64 updates to bring feature parity between the platforms. I just haven't had enough time to study the developer's manuals in depth. I'm working on it.
+
+### Project Update
+
 Well, it's that time again.
 
 This time around nebulae has a new component: a rust kernel (unironically named iron).

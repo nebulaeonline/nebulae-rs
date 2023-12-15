@@ -1,22 +1,32 @@
-use crate::common::*;
-
 use crate::bitmap::*;
+use crate::common::base::*;
+use crate::common::kernel_statics::*;
+use crate::common::naughty::*;
 
-use core::alloc::{GlobalAlloc, Layout};
+//use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::Layout;
 
 trait SubAllocator {
     fn internal_alloc(&self, layout: Layout) -> Option<VirtAddr>;
     fn internal_dealloc(&self, ptr: *mut u8, layout: Layout) -> bool;
     fn internal_alloc_zeroed(&self, layout: Layout) -> Option<VirtAddr>;
-    fn internal_realloc(&self, ptr: *mut u8, old_layout: Layout, new_size: usize) -> Option<VirtAddr>;
+    fn internal_realloc(
+        &self,
+        ptr: *mut u8,
+        old_layout: Layout,
+        new_size: usize,
+    ) -> Option<VirtAddr>;
 
     fn capacity(&self) -> usize;
     fn used(&self) -> usize;
     fn free(&self) -> usize;
 }
 
+// TODO: this needs to be updated when the more robust page size handling code is in place
+#[allow(dead_code)]
 pub struct MemoryPool {
     name: &'static str,
+    page_size: PageSize,
     block_size: usize,
     capacity: usize,
     start: VirtAddr,
@@ -30,8 +40,8 @@ impl MemoryPool {
     }
 
     #[inline(always)]
-    pub fn calc_bitmap_size_in_uintn(capacity: usize) -> usize {
-        Bitmap::calc_size_in_uintn(capacity)
+    pub fn calc_bitmap_size_in_usize(capacity: usize) -> usize {
+        Bitmap::calc_size_in_usize(capacity)
     }
 
     #[inline(always)]
@@ -44,9 +54,17 @@ impl MemoryPool {
         calc_pages_reqd(capacity * block_size, page_size)
     }
 
-    pub fn new(name: &'static str, block_size: usize, capacity: usize, start: VirtAddr, bitmap_start: VirtAddr) -> Self {
+    pub fn new(
+        name: &'static str,
+        page_size: PageSize,
+        block_size: usize,
+        capacity: usize,
+        start: VirtAddr,
+        bitmap_start: VirtAddr,
+    ) -> Self {
         MemoryPool {
             name: name,
+            page_size: page_size,
             block_size: block_size,
             capacity: capacity,
             start: start,
@@ -56,37 +74,56 @@ impl MemoryPool {
     }
 
     pub fn init(&mut self) -> Option<VirtAddr> {
-
         // first try and allocate contiguous memory, then fall back to non-contiguous
-        let contiguous = unsafe { KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-            .alloc_pages_contiguous(
-                self.capacity * self.block_size, 
-                self.start, 
-                PageSize::Small,
-                PAGING_WRITABLE | PAGING_WRITETHROUGH,
-                BitPattern::ZeroZero) };
+        let contiguous = unsafe {
+            KERNEL_BASE_VAS_4
+                .lock()
+                .as_mut()
+                .unwrap()
+                .base_page_table
+                .as_mut()
+                .unwrap()
+                .alloc_pages_contiguous(
+                    calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
+                    self.start,
+                    PageSize::Small,
+                    PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                    BitPattern::ZeroZero,
+                )
+        };
 
         if contiguous.is_some() {
-            self.bitmap.init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
+            self.bitmap
+                .init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
             self.bitmap.set_all();
             return contiguous;
         } else {
-            let nc = unsafe { KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-                .alloc_pages(
-                    self.capacity * self.block_size, 
-                    self.start, 
-                    PageSize::Small,
-                    PAGING_WRITABLE | PAGING_WRITETHROUGH,
-                    BitPattern::ZeroZero) };
+            let nc = unsafe {
+                KERNEL_BASE_VAS_4
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .base_page_table
+                    .as_mut()
+                    .unwrap()
+                    .alloc_pages(
+                        self.capacity * self.block_size,
+                        self.start,
+                        PageSize::Small,
+                        PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                        BitPattern::ZeroZero,
+                    )
+            };
 
             if nc.is_some() {
-                self.bitmap.init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
+                self.bitmap
+                    .init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
                 self.bitmap.set_all();
                 return nc;
             } else {
                 return None;
             }
-        }                
+        }
     }
 
     pub fn name(&self) -> &'static str {
@@ -103,11 +140,19 @@ impl Drop for MemoryPool {
         // we need to free the memory we allocated for the pool;
         // the bitmap will be de-allocated when the bitmap is dropped
         // as part of its own custom Drop implementation
-        unsafe { KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-            .dealloc_pages_contiguous(
-                self.start, 
-                self.capacity * self.block_size, 
-                PageSize::Small) 
+        unsafe {
+            KERNEL_BASE_VAS_4
+                .lock()
+                .as_mut()
+                .unwrap()
+                .base_page_table
+                .as_mut()
+                .unwrap()
+                .dealloc_pages_contiguous(
+                    self.start,
+                    self.capacity * self.block_size,
+                    PageSize::Small,
+                )
         };
     }
 }
@@ -117,14 +162,14 @@ impl SubAllocator for MemoryPool {
         if layout.size() > self.block_size {
             return None;
         }
-        
+
         let free_idx = self.bitmap.find_first_set();
         if free_idx.is_some() {
             let free_addr = self.start.as_usize() + (free_idx.unwrap() * self.block_size);
             self.bitmap.clear(free_idx.unwrap());
             return Some(VirtAddr(free_addr));
         } else {
-            return None;        
+            return None;
         }
     }
 
@@ -144,7 +189,9 @@ impl SubAllocator for MemoryPool {
     fn internal_alloc_zeroed(&self, layout: Layout) -> Option<VirtAddr> {
         let alloc = self.internal_alloc(layout);
 
-        if alloc.is_none() { return None; }
+        if alloc.is_none() {
+            return None;
+        }
 
         let alloc_begin = alloc.unwrap().as_usize();
         let alloc_end = alloc_begin + layout.size();
@@ -155,10 +202,15 @@ impl SubAllocator for MemoryPool {
     }
 
     // Memory pool don't do no re-allocin'
-    fn internal_realloc(&self, ptr: *mut u8, _old_layout: Layout, _new_size: usize) -> Option<VirtAddr> {
+    fn internal_realloc(
+        &self,
+        ptr: *mut u8,
+        _old_layout: Layout,
+        _new_size: usize,
+    ) -> Option<VirtAddr> {
         Some(VirtAddr(ptr as usize))
     }
-    
+
     fn capacity(&self) -> usize {
         self.capacity
     }
@@ -172,35 +224,35 @@ impl SubAllocator for MemoryPool {
     }
 }
 
-unsafe impl GlobalAlloc for MemoryPool {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let alloc = self.internal_alloc(layout);
-        if alloc.is_some() {
-            return addr_to_ptr_mut::<u8, VirtAddr>(alloc.unwrap());
-        } else {
-            return core::ptr::null_mut();
-        }
-    }
+// unsafe impl GlobalAlloc for MemoryPool {
+//     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+//         let alloc = self.internal_alloc(layout);
+//         if alloc.is_some() {
+//             return addr_to_ptr_mut::<u8, VirtAddr>(alloc.unwrap());
+//         } else {
+//             return core::ptr::null_mut();
+//         }
+//     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.internal_dealloc(ptr, layout);
-    }
+//     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+//         self.internal_dealloc(ptr, layout);
+//     }
 
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        let alloc = self.internal_alloc_zeroed(layout);
-        if alloc.is_some() {
-            return addr_to_ptr_mut::<u8, VirtAddr>(alloc.unwrap());
-        } else {
-            return core::ptr::null_mut();
-        }
-    }
+//     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+//         let alloc = self.internal_alloc_zeroed(layout);
+//         if alloc.is_some() {
+//             return addr_to_ptr_mut::<u8, VirtAddr>(alloc.unwrap());
+//         } else {
+//             return core::ptr::null_mut();
+//         }
+//     }
 
-    unsafe fn realloc(&self, ptr: *mut u8, old_layout: Layout, new_size: usize) -> *mut u8 {
-        let realloc = self.internal_realloc(ptr, old_layout, new_size);
-        if realloc.is_some() {
-            return addr_to_ptr_mut::<u8, VirtAddr>(realloc.unwrap());
-        } else {
-            return core::ptr::null_mut();
-        }
-    }
-}
+//     unsafe fn realloc(&self, ptr: *mut u8, old_layout: Layout, new_size: usize) -> *mut u8 {
+//         let realloc = self.internal_realloc(ptr, old_layout, new_size);
+//         if realloc.is_some() {
+//             return addr_to_ptr_mut::<u8, VirtAddr>(realloc.unwrap());
+//         } else {
+//             return core::ptr::null_mut();
+//         }
+//     }
+// }

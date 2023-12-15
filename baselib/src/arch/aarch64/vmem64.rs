@@ -1,6 +1,7 @@
 use uefi::table::boot::MemoryType;
 
-use crate::common::*;
+use crate::common::base::*;
+use crate::common::kernel_statics::*;
 
 use core::ptr;
 
@@ -20,8 +21,7 @@ impl Vas {
         }
     }
 
-    pub fn switch_to(&mut self) {
-    }
+    pub fn switch_to(&mut self) {}
 
     pub fn identity_map_based_on_memory_map(&mut self) {
         for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_ref().unwrap().entries() } {
@@ -67,7 +67,7 @@ impl PageSize {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct PageTable {    
+pub struct PageTable {
     pub entries: [usize; PAGE_TABLE_MAX_ENTRIES],
 }
 

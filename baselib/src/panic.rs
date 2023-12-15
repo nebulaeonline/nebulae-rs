@@ -4,8 +4,8 @@
 
 //! A panic handler that infinitely waits.
 
-use crate::serial_println;
 use crate::cpu;
+use crate::serial_println;
 
 use core::panic::PanicInfo;
 

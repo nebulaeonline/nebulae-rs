@@ -118,7 +118,8 @@ pub struct CacheDescriptor {
 
 // Legacy configs CPUID(2)
 pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
-    CacheDescriptor { // NULL Descriptor - 0x00
+    CacheDescriptor {
+        // NULL Descriptor - 0x00
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -128,7 +129,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x01
+    CacheDescriptor {
+        // 0x01
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -138,7 +140,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x02
+    CacheDescriptor {
+        // 0x02
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4M,
@@ -148,7 +151,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x03
+    CacheDescriptor {
+        // 0x03
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -158,7 +162,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x04
+    CacheDescriptor {
+        // 0x04
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4M,
@@ -168,7 +173,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x05
+    CacheDescriptor {
+        // 0x05
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4M,
@@ -178,7 +184,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x06
+    CacheDescriptor {
+        // 0x06
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size8K,
@@ -188,7 +195,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x07 (UNKNOWN)
+    CacheDescriptor {
+        // 0x07 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -198,7 +206,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x08
+    CacheDescriptor {
+        // 0x08
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size16K,
@@ -208,7 +217,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x09
+    CacheDescriptor {
+        // 0x09
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size32K,
@@ -218,7 +228,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0A
+    CacheDescriptor {
+        // 0x0A
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size8K,
@@ -228,7 +239,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0B
+    CacheDescriptor {
+        // 0x0B
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4M,
@@ -238,7 +250,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0C
+    CacheDescriptor {
+        // 0x0C
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size16K,
@@ -248,7 +261,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0D
+    CacheDescriptor {
+        // 0x0D
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size16K,
@@ -258,7 +272,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: true,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0E
+    CacheDescriptor {
+        // 0x0E
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size24K,
@@ -268,7 +283,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x0F (UNKNOWN)
+    CacheDescriptor {
+        // 0x0F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -278,7 +294,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x10
+    CacheDescriptor {
+        // 0x10
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size16K,
@@ -288,7 +305,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x11 (UNKNOWN)
+    CacheDescriptor {
+        // 0x11 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -298,7 +316,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x12 (UNKNOWN)
+    CacheDescriptor {
+        // 0x12 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -308,7 +327,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x13 (UNKNOWN)
+    CacheDescriptor {
+        // 0x13 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -318,7 +338,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x14 (UNKNOWN)
+    CacheDescriptor {
+        // 0x14 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -328,7 +349,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x15
+    CacheDescriptor {
+        // 0x15
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size16K,
@@ -338,7 +360,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x16 (UNKNOWN)
+    CacheDescriptor {
+        // 0x16 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -348,7 +371,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x17 (UNKNOWN)
+    CacheDescriptor {
+        // 0x17 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -358,7 +382,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x18 (UNKNOWN)
+    CacheDescriptor {
+        // 0x18 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -368,7 +393,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x19 (UNKNOWN)
+    CacheDescriptor {
+        // 0x19 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -378,7 +404,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1A
+    CacheDescriptor {
+        // 0x1A
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size96K,
@@ -388,7 +415,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1B (UNKNOWN)
+    CacheDescriptor {
+        // 0x1B (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -398,7 +426,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1C (UNKNOWN)
+    CacheDescriptor {
+        // 0x1C (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -408,7 +437,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1D
+    CacheDescriptor {
+        // 0x1D
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -418,7 +448,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1E (UNKNOWN)
+    CacheDescriptor {
+        // 0x1E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -428,7 +459,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x1F (UNKNOWN)
+    CacheDescriptor {
+        // 0x1F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -438,7 +470,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x20 (UNKNOWN)
+    CacheDescriptor {
+        // 0x20 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -448,7 +481,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x21
+    CacheDescriptor {
+        // 0x21
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -458,7 +492,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x22
+    CacheDescriptor {
+        // 0x22
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -468,7 +503,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x23
+    CacheDescriptor {
+        // 0x23
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -478,7 +514,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x24
+    CacheDescriptor {
+        // 0x24
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -488,7 +525,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x25
+    CacheDescriptor {
+        // 0x25
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -498,7 +536,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x26 (UNKNOWN)
+    CacheDescriptor {
+        // 0x26 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -508,7 +547,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x27 (UNKNOWN)
+    CacheDescriptor {
+        // 0x27 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -518,7 +558,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x28 (UNKNOWN)
+    CacheDescriptor {
+        // 0x28 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -528,7 +569,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x29
+    CacheDescriptor {
+        // 0x29
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -538,7 +580,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x2A (UNKNOWN)
+    CacheDescriptor {
+        // 0x2A (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -548,7 +591,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x2B (UNKNOWN)
+    CacheDescriptor {
+        // 0x2B (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -558,7 +602,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x2C
+    CacheDescriptor {
+        // 0x2C
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size32K,
@@ -568,7 +613,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x2D (UNKNOWN)
+    CacheDescriptor {
+        // 0x2D (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -578,7 +624,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x2E (UNKNOWN)
+    CacheDescriptor {
+        // 0x2E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -588,7 +635,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x2F (UNKNOWN)
+    CacheDescriptor {
+        // 0x2F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -598,7 +646,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x30
+    CacheDescriptor {
+        // 0x30
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size32K,
@@ -608,7 +657,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x31 (UNKNOWN)
+    CacheDescriptor {
+        // 0x31 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -618,7 +668,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x32 (UNKNOWN)
+    CacheDescriptor {
+        // 0x32 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -628,7 +679,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x33 (UNKNOWN)
+    CacheDescriptor {
+        // 0x33 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -638,7 +690,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x34 (UNKNOWN)
+    CacheDescriptor {
+        // 0x34 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -648,7 +701,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x35 (UNKNOWN)
+    CacheDescriptor {
+        // 0x35 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -658,7 +712,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x36 (UNKNOWN)
+    CacheDescriptor {
+        // 0x36 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -668,7 +723,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x37 (UNKNOWN)
+    CacheDescriptor {
+        // 0x37 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -678,7 +734,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x38 (UNKNOWN)
+    CacheDescriptor {
+        // 0x38 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -688,7 +745,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x39
+    CacheDescriptor {
+        // 0x39
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -698,7 +756,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3A
+    CacheDescriptor {
+        // 0x3A
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size192K,
@@ -708,7 +767,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3B
+    CacheDescriptor {
+        // 0x3B
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -718,7 +778,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3C
+    CacheDescriptor {
+        // 0x3C
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -728,7 +789,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3D
+    CacheDescriptor {
+        // 0x3D
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size384K,
@@ -738,7 +800,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3E
+    CacheDescriptor {
+        // 0x3E
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -748,7 +811,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x3F (UNKNOWN)
+    CacheDescriptor {
+        // 0x3F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -758,7 +822,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x40
+    CacheDescriptor {
+        // 0x40
         level: CacheLevel::L2,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -768,7 +833,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x41
+    CacheDescriptor {
+        // 0x41
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -778,7 +844,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x42
+    CacheDescriptor {
+        // 0x42
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -788,7 +855,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x43
+    CacheDescriptor {
+        // 0x43
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -798,7 +866,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x44
+    CacheDescriptor {
+        // 0x44
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -808,7 +877,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x45
+    CacheDescriptor {
+        // 0x45
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -818,7 +888,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x46
+    CacheDescriptor {
+        // 0x46
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -828,7 +899,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x47
+    CacheDescriptor {
+        // 0x47
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size8192K,
@@ -838,7 +910,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x48
+    CacheDescriptor {
+        // 0x48
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size3072K,
@@ -848,7 +921,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x49 - !! is L3 cache on P4 !!
+    CacheDescriptor {
+        // 0x49 - !! is L3 cache on P4 !!
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -858,7 +932,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4A
+    CacheDescriptor {
+        // 0x4A
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size6144K,
@@ -868,7 +943,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4B
+    CacheDescriptor {
+        // 0x4B
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size8192K,
@@ -878,7 +954,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4C
+    CacheDescriptor {
+        // 0x4C
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size12288K,
@@ -888,7 +965,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4D
+    CacheDescriptor {
+        // 0x4D
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size16384K,
@@ -898,7 +976,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4E
+    CacheDescriptor {
+        // 0x4E
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size6144K,
@@ -908,7 +987,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x4F
+    CacheDescriptor {
+        // 0x4F
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size128K,
@@ -918,7 +998,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x50
+    CacheDescriptor {
+        // 0x50
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K2M4M,
@@ -928,7 +1009,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x51
+    CacheDescriptor {
+        // 0x51
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K2M4M,
@@ -938,7 +1020,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x52
+    CacheDescriptor {
+        // 0x52
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K2M4M,
@@ -948,7 +1031,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x53 (UNKNOWN)
+    CacheDescriptor {
+        // 0x53 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -958,7 +1042,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x54 (UNKNOWN)
+    CacheDescriptor {
+        // 0x54 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -968,7 +1053,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x55
+    CacheDescriptor {
+        // 0x55
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size2M4M,
@@ -978,7 +1064,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x56
+    CacheDescriptor {
+        // 0x56
         level: CacheLevel::L0TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4M,
@@ -988,7 +1075,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x57
+    CacheDescriptor {
+        // 0x57
         level: CacheLevel::L0TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -998,7 +1086,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x58 (UNKNOWN)
+    CacheDescriptor {
+        // 0x58 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1008,7 +1097,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x59
+    CacheDescriptor {
+        // 0x59
         level: CacheLevel::L0TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4M,
@@ -1018,7 +1108,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5A
+    CacheDescriptor {
+        // 0x5A
         level: CacheLevel::L0TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size2M4M,
@@ -1028,7 +1119,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5B
+    CacheDescriptor {
+        // 0x5B
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K4M,
@@ -1038,7 +1130,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5C
+    CacheDescriptor {
+        // 0x5C
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K4M,
@@ -1048,7 +1141,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5D
+    CacheDescriptor {
+        // 0x5D
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K4M,
@@ -1058,7 +1152,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5E (UNKNOWN)
+    CacheDescriptor {
+        // 0x5E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1068,7 +1163,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x5F (UNKNOWN)
+    CacheDescriptor {
+        // 0x5F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1078,7 +1174,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x60
+    CacheDescriptor {
+        // 0x60
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size16K,
@@ -1088,7 +1185,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x61
+    CacheDescriptor {
+        // 0x61
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -1098,7 +1196,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x62 (UNKNOWN)
+    CacheDescriptor {
+        // 0x62 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1108,7 +1207,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x63
+    CacheDescriptor {
+        // 0x63
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size2M4M,
@@ -1118,7 +1218,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x64
+    CacheDescriptor {
+        // 0x64
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1128,7 +1229,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x65 (UNKNOWN)
+    CacheDescriptor {
+        // 0x65 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1138,7 +1240,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x66
+    CacheDescriptor {
+        // 0x66
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size8K,
@@ -1148,7 +1251,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x67
+    CacheDescriptor {
+        // 0x67
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size16K,
@@ -1158,7 +1262,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x68
+    CacheDescriptor {
+        // 0x68
         level: CacheLevel::L1,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size32K,
@@ -1168,7 +1273,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x69 (UNKNOWN)
+    CacheDescriptor {
+        // 0x69 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1178,7 +1284,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6A
+    CacheDescriptor {
+        // 0x6A
         level: CacheLevel::L0TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1188,7 +1295,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6B
+    CacheDescriptor {
+        // 0x6B
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1198,7 +1306,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6C
+    CacheDescriptor {
+        // 0x6C
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size2M4M,
@@ -1208,7 +1317,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6D
+    CacheDescriptor {
+        // 0x6D
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size1G,
@@ -1218,7 +1328,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6E (UNKNOWN)
+    CacheDescriptor {
+        // 0x6E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1228,7 +1339,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x6F (UNKNOWN)
+    CacheDescriptor {
+        // 0x6F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1238,7 +1350,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x70
+    CacheDescriptor {
+        // 0x70
         level: CacheLevel::L1,
         type_of_cache: CacheType::Trace,
         size: CacheSize::Size12KuOps,
@@ -1248,7 +1361,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x71
+    CacheDescriptor {
+        // 0x71
         level: CacheLevel::L1,
         type_of_cache: CacheType::Trace,
         size: CacheSize::Size16KuOps,
@@ -1258,7 +1372,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x72
+    CacheDescriptor {
+        // 0x72
         level: CacheLevel::L1,
         type_of_cache: CacheType::Trace,
         size: CacheSize::Size32KuOps,
@@ -1268,7 +1383,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x73
+    CacheDescriptor {
+        // 0x73
         level: CacheLevel::L1,
         type_of_cache: CacheType::Trace,
         size: CacheSize::Size64KuOps,
@@ -1278,7 +1394,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x74 (UNKNOWN)
+    CacheDescriptor {
+        // 0x74 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1288,7 +1405,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x75 (UNKNOWN)
+    CacheDescriptor {
+        // 0x75 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1298,7 +1416,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x76
+    CacheDescriptor {
+        // 0x76
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size2M4M,
@@ -1308,7 +1427,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x77
+    CacheDescriptor {
+        // 0x77
         level: CacheLevel::L1,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size16K,
@@ -1318,7 +1438,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x78
+    CacheDescriptor {
+        // 0x78
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -1328,7 +1449,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x79
+    CacheDescriptor {
+        // 0x79
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -1338,7 +1460,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x7A
+    CacheDescriptor {
+        // 0x7A
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -1348,7 +1471,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x7B
+    CacheDescriptor {
+        // 0x7B
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -1358,7 +1482,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x7C
+    CacheDescriptor {
+        // 0x7C
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -1368,7 +1493,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Dual,
     },
-    CacheDescriptor { // 0x7D
+    CacheDescriptor {
+        // 0x7D
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -1378,7 +1504,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x7E
+    CacheDescriptor {
+        // 0x7E
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -1388,7 +1515,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::Single,
     },
-    CacheDescriptor { // 0x7F
+    CacheDescriptor {
+        // 0x7F
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -1398,7 +1526,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x80
+    CacheDescriptor {
+        // 0x80
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -1408,7 +1537,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x81
+    CacheDescriptor {
+        // 0x81
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size128K,
@@ -1418,7 +1548,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x82
+    CacheDescriptor {
+        // 0x82
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size256K,
@@ -1428,7 +1559,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x83
+    CacheDescriptor {
+        // 0x83
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -1438,7 +1570,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x84
+    CacheDescriptor {
+        // 0x84
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -1448,7 +1581,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x85
+    CacheDescriptor {
+        // 0x85
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -1458,7 +1592,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x86
+    CacheDescriptor {
+        // 0x86
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -1468,7 +1603,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x87
+    CacheDescriptor {
+        // 0x87
         level: CacheLevel::L2,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -1478,7 +1614,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x88
+    CacheDescriptor {
+        // 0x88
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -1488,7 +1625,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x89
+    CacheDescriptor {
+        // 0x89
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -1498,7 +1636,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8A
+    CacheDescriptor {
+        // 0x8A
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size8192K,
@@ -1508,7 +1647,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8B (UNKNOWN)
+    CacheDescriptor {
+        // 0x8B (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1518,7 +1658,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8C (UNKNOWN)
+    CacheDescriptor {
+        // 0x8C (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1528,7 +1669,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8D
+    CacheDescriptor {
+        // 0x8D
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size3072K,
@@ -1538,7 +1680,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8E (UNKNOWN)
+    CacheDescriptor {
+        // 0x8E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1548,7 +1691,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x8F (UNKNOWN)
+    CacheDescriptor {
+        // 0x8F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1558,7 +1702,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x90
+    CacheDescriptor {
+        // 0x90
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K256M,
@@ -1568,7 +1713,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x91 (UNKNOWN)
+    CacheDescriptor {
+        // 0x91 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1578,7 +1724,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x92 (UNKNOWN)
+    CacheDescriptor {
+        // 0x92 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1588,7 +1735,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x93 (UNKNOWN)
+    CacheDescriptor {
+        // 0x93 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1598,7 +1746,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x94 (UNKNOWN)
+    CacheDescriptor {
+        // 0x94 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1608,7 +1757,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x95 (UNKNOWN)
+    CacheDescriptor {
+        // 0x95 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1618,17 +1768,19 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x96
+    CacheDescriptor {
+        // 0x96
         level: CacheLevel::L1TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K256M,
         associativity: CacheAssociativity::Fully,
         layout: CacheLayoutType::Entries,
-        count:32,
+        count: 32,
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x97 (UNKNOWN)
+    CacheDescriptor {
+        // 0x97 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1638,7 +1790,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x98 (UNKNOWN)
+    CacheDescriptor {
+        // 0x98 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1648,7 +1801,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x99 (UNKNOWN)
+    CacheDescriptor {
+        // 0x99 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1658,7 +1812,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9A (UNKNOWN)
+    CacheDescriptor {
+        // 0x9A (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1668,17 +1823,19 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9B
+    CacheDescriptor {
+        // 0x9B
         level: CacheLevel::L2TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K256M,
         associativity: CacheAssociativity::Fully,
         layout: CacheLayoutType::Entries,
-        count:96,
+        count: 96,
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9C (UNKNOWN)
+    CacheDescriptor {
+        // 0x9C (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1688,7 +1845,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9D (UNKNOWN)
+    CacheDescriptor {
+        // 0x9D (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1698,7 +1856,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9E (UNKNOWN)
+    CacheDescriptor {
+        // 0x9E (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1708,7 +1867,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0x9F (UNKNOWN)
+    CacheDescriptor {
+        // 0x9F (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1718,17 +1878,19 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA0
+    CacheDescriptor {
+        // 0xA0
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
         associativity: CacheAssociativity::Fully,
         layout: CacheLayoutType::Entries,
-        count:96,
+        count: 96,
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA1 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA1 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1738,7 +1900,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA2 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA2 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1748,7 +1911,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA3 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA3 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1758,7 +1922,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA4 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA4 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1768,7 +1933,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA5 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA5 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1778,7 +1944,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA6 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA6 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1788,7 +1955,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA7 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA7 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1798,7 +1966,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA8 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA8 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1808,7 +1977,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xA9 (UNKNOWN)
+    CacheDescriptor {
+        // 0xA9 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1818,7 +1988,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAA (UNKNOWN)
+    CacheDescriptor {
+        // 0xAA (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1828,7 +1999,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAB (UNKNOWN)
+    CacheDescriptor {
+        // 0xAB (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1838,7 +2010,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAC (UNKNOWN)
+    CacheDescriptor {
+        // 0xAC (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1848,7 +2021,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAD (UNKNOWN)
+    CacheDescriptor {
+        // 0xAD (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1858,7 +2032,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAE (UNKNOWN)
+    CacheDescriptor {
+        // 0xAE (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1868,7 +2043,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xAF (UNKNOWN)
+    CacheDescriptor {
+        // 0xAF (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1878,7 +2054,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB0
+    CacheDescriptor {
+        // 0xB0
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -1888,7 +2065,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB1
+    CacheDescriptor {
+        // 0xB1
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size2M,
@@ -1898,7 +2076,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB2
+    CacheDescriptor {
+        // 0xB2
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -1908,7 +2087,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB3
+    CacheDescriptor {
+        // 0xB3
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1918,7 +2098,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB4
+    CacheDescriptor {
+        // 0xB4
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1928,7 +2109,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB5
+    CacheDescriptor {
+        // 0xB5
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -1938,7 +2120,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB6
+    CacheDescriptor {
+        // 0xB6
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K,
@@ -1948,7 +2131,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB7 (UNKNOWN)
+    CacheDescriptor {
+        // 0xB7 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1958,7 +2142,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB8 (UNKNOWN)
+    CacheDescriptor {
+        // 0xB8 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1968,7 +2153,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xB9 (UNKNOWN)
+    CacheDescriptor {
+        // 0xB9 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1978,7 +2164,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBA
+    CacheDescriptor {
+        // 0xBA
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K,
@@ -1988,7 +2175,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBB (UNKNOWN)
+    CacheDescriptor {
+        // 0xBB (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -1998,7 +2186,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBC (UNKNOWN)
+    CacheDescriptor {
+        // 0xBC (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2008,7 +2197,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBD (UNKNOWN)
+    CacheDescriptor {
+        // 0xBD (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2018,7 +2208,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBE (UNKNOWN)
+    CacheDescriptor {
+        // 0xBE (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2028,7 +2219,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xBF (UNKNOWN)
+    CacheDescriptor {
+        // 0xBF (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2038,7 +2230,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC0
+    CacheDescriptor {
+        // 0xC0
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size4K4M,
@@ -2048,7 +2241,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC1
+    CacheDescriptor {
+        // 0xC1
         level: CacheLevel::L2TLB,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4K2M,
@@ -2058,7 +2252,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC2
+    CacheDescriptor {
+        // 0xC2
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size2M4M,
@@ -2068,7 +2263,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC3
+    CacheDescriptor {
+        // 0xC3
         level: CacheLevel::L2,
         type_of_cache: CacheType::Code,
         size: CacheSize::Size4K2M,
@@ -2078,7 +2274,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC4
+    CacheDescriptor {
+        // 0xC4
         level: CacheLevel::TLB,
         type_of_cache: CacheType::Data,
         size: CacheSize::Size2M4M,
@@ -2088,7 +2285,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC5 (UNKNOWN)
+    CacheDescriptor {
+        // 0xC5 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2098,7 +2296,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC6 (UNKNOWN)
+    CacheDescriptor {
+        // 0xC6 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2108,7 +2307,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC7 (UNKNOWN)
+    CacheDescriptor {
+        // 0xC7 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2118,7 +2318,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC8 (UNKNOWN)
+    CacheDescriptor {
+        // 0xC8 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2128,7 +2329,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xC9 (UNKNOWN)
+    CacheDescriptor {
+        // 0xC9 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2138,7 +2340,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCA
+    CacheDescriptor {
+        // 0xCA
         level: CacheLevel::L2TLB,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4K,
@@ -2148,7 +2351,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCB (UNKNOWN)
+    CacheDescriptor {
+        // 0xCB (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2158,7 +2362,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCC (UNKNOWN)
+    CacheDescriptor {
+        // 0xCC (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2168,7 +2373,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCD (UNKNOWN)
+    CacheDescriptor {
+        // 0xCD (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2178,7 +2384,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCE (UNKNOWN)
+    CacheDescriptor {
+        // 0xCE (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2188,7 +2395,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xCF (UNKNOWN)
+    CacheDescriptor {
+        // 0xCF (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2198,7 +2406,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD0
+    CacheDescriptor {
+        // 0xD0
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size512K,
@@ -2208,7 +2417,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD1
+    CacheDescriptor {
+        // 0xD1
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -2218,7 +2428,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD2
+    CacheDescriptor {
+        // 0xD2
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -2228,7 +2439,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD3 (UNKNOWN)
+    CacheDescriptor {
+        // 0xD3 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2238,7 +2450,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD4 (UNKNOWN)
+    CacheDescriptor {
+        // 0xD4 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2248,7 +2461,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD5 (UNKNOWN)
+    CacheDescriptor {
+        // 0xD5 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2258,7 +2472,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD6
+    CacheDescriptor {
+        // 0xD6
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1024K,
@@ -2268,7 +2483,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD7
+    CacheDescriptor {
+        // 0xD7
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -2278,7 +2494,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD8
+    CacheDescriptor {
+        // 0xD8
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -2288,7 +2505,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xD9 (UNKNOWN)
+    CacheDescriptor {
+        // 0xD9 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2298,7 +2516,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDA (UNKNOWN)
+    CacheDescriptor {
+        // 0xDA (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2308,7 +2527,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDB (UNKNOWN)
+    CacheDescriptor {
+        // 0xDB (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2318,7 +2538,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDC
+    CacheDescriptor {
+        // 0xDC
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size1536K,
@@ -2328,7 +2549,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDD
+    CacheDescriptor {
+        // 0xDD
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size3072K,
@@ -2338,7 +2560,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDE
+    CacheDescriptor {
+        // 0xDE
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size6144K,
@@ -2348,7 +2571,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xDF (UNKNOWN)
+    CacheDescriptor {
+        // 0xDF (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2358,7 +2582,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE0 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE0 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2368,7 +2593,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE1 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE1 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2378,7 +2604,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE2
+    CacheDescriptor {
+        // 0xE2
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size2048K,
@@ -2388,7 +2615,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE3
+    CacheDescriptor {
+        // 0xE3
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size4096K,
@@ -2398,7 +2626,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE4
+    CacheDescriptor {
+        // 0xE4
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size8192K,
@@ -2408,7 +2637,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE5 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE5 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2418,7 +2648,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE6 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE6 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2428,7 +2659,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE7 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE7 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2438,7 +2670,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE8 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE8 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2448,7 +2681,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xE9 (UNKNOWN)
+    CacheDescriptor {
+        // 0xE9 (UNKNOWN)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2458,7 +2692,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xEA
+    CacheDescriptor {
+        // 0xEA
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size12288K,
@@ -2468,7 +2703,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xEB
+    CacheDescriptor {
+        // 0xEB
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size18432K,
@@ -2478,7 +2714,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xEC
+    CacheDescriptor {
+        // 0xEC
         level: CacheLevel::L3,
         type_of_cache: CacheType::CodeAndData,
         size: CacheSize::Size24576K,
@@ -2488,7 +2725,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xED (Unknown)
+    CacheDescriptor {
+        // 0xED (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2498,7 +2736,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xEE (Unknown)
+    CacheDescriptor {
+        // 0xEE (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2508,7 +2747,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xEF (Unknown)
+    CacheDescriptor {
+        // 0xEF (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2518,7 +2758,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF0 (Unknown)
+    CacheDescriptor {
+        // 0xF0 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2528,7 +2769,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF1 (Unknown)
+    CacheDescriptor {
+        // 0xF1 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2538,7 +2780,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF2 (Unknown)
+    CacheDescriptor {
+        // 0xF2 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2548,7 +2791,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF3 (Unknown)
+    CacheDescriptor {
+        // 0xF3 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2558,7 +2802,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF4 (Unknown)
+    CacheDescriptor {
+        // 0xF4 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2568,7 +2813,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF5 (Unknown)
+    CacheDescriptor {
+        // 0xF5 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2578,7 +2824,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF6 (Unknown)
+    CacheDescriptor {
+        // 0xF6 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2588,7 +2835,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF7 (Unknown)
+    CacheDescriptor {
+        // 0xF7 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2598,7 +2846,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF8 (Unknown)
+    CacheDescriptor {
+        // 0xF8 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2608,7 +2857,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xF9 (Unknown)
+    CacheDescriptor {
+        // 0xF9 (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2618,7 +2868,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFA (Unknown)
+    CacheDescriptor {
+        // 0xFA (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2628,7 +2879,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFB (Unknown)
+    CacheDescriptor {
+        // 0xFB (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2638,7 +2890,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFC (Unknown)
+    CacheDescriptor {
+        // 0xFC (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2648,7 +2901,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFD (Unknown)
+    CacheDescriptor {
+        // 0xFD (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2658,7 +2912,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFE (Unknown)
+    CacheDescriptor {
+        // 0xFE (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,
@@ -2668,7 +2923,8 @@ pub const CACHE_CONFIGS: [CacheDescriptor; 0x100] = [
         ecc: false,
         sectored: CacheSectored::No,
     },
-    CacheDescriptor { // 0xFF (Unknown)
+    CacheDescriptor {
+        // 0xFF (Unknown)
         level: CacheLevel::Unknown,
         type_of_cache: CacheType::Unknown,
         size: CacheSize::Unknown,

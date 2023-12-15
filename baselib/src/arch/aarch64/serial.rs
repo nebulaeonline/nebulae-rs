@@ -1,8 +1,8 @@
 // Adapted from phil-opp & Mike Krinkin & uart-16550
 #![cfg(target_arch = "aarch64")]
 
-use core::ptr;
 use core::fmt::Write;
+use core::ptr;
 
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -43,7 +43,6 @@ const UARTLCR_STP2: u32 = 1 << 3;
 const UARTLCR_FEN: u32 = 1 << 4;
 const UARTCR_EN: u32 = 1 << 0;
 const UARTCR_TXEN: u32 = 1 << 8;
-
 
 impl PL011 {
     pub fn new(base_address: u64, base_clock: u32) -> Self {
@@ -117,12 +116,13 @@ impl PL011 {
     fn store(&self, r: Register, value: u32) {
         let addr = self.base_address + (r as u64);
 
-        unsafe { ptr::write_volatile(addr as *mut u32, value); }
+        unsafe {
+            ptr::write_volatile(addr as *mut u32, value);
+        }
     }
 
     fn calculate_divisors(&self) -> (u32, u32) {
-        let div =
-            (8 * self.base_clock + self.baudrate) / (2 * self.baudrate);
+        let div = (8 * self.base_clock + self.baudrate) / (2 * self.baudrate);
 
         ((div >> 6) & 0xffff, div & 0x3f)
     }
@@ -136,7 +136,7 @@ impl Write for PL011 {
 }
 
 #[doc(hidden)]
-pub fn _print(args: ::core::fmt::Arguments) {    
+pub fn _print(args: ::core::fmt::Arguments) {
     SERIAL1
         .lock()
         .write_fmt(args)

@@ -1,26 +1,28 @@
-use crate::common::*;
+use crate::common::base::*;
+use crate::common::kernel_statics::*;
+use crate::common::naughty::*;
 
+use core::cell::Cell;
+use core::ops::Range;
 use core::ptr;
 use core::slice;
-use core::ops::Range;
-use core::cell::Cell;
 
 pub trait BitmapOps {
     // base_vaddr is ignored if pre_allocated_base is not 0
     fn new() -> Bitmap;
     fn init(&self, item_cap: usize, base_vaddr: VirtAddr, pre_allocated_base: VirtAddr) -> bool;
 
-    fn size_in_uintn(&self) -> usize;
+    fn size_in_usize(&self) -> usize;
     fn size_in_pages(&self) -> usize;
     fn size_in_bytes(&self) -> usize;
 
-    fn calc_size_in_uintn(capacity: usize) -> usize;
+    fn calc_size_in_usize(capacity: usize) -> usize;
     fn calc_size_in_pages(capacity: usize, page_size: PageSize) -> usize;
     fn calc_item_index(item: usize) -> usize;
     fn calc_item_bit_index(item: usize) -> usize;
 
-    fn get_bitmap_ref_mut(&self) -> &mut [Uintn];
-    fn get_bitmap_ref(&self) -> & [Uintn];
+    fn get_bitmap_ref_mut(&self) -> &mut [usize];
+    fn get_bitmap_ref(&self) -> &[usize];
 
     fn set(&self, item: usize);
     fn clear(&self, item: usize);
@@ -55,31 +57,51 @@ pub trait BitmapOps {
     fn find_clear_from_item(&self, item: usize) -> Option<usize>;
     fn find_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize>;
     fn find_clear_region(&self, item: usize, reqd_item_count: usize) -> Option<usize>;
-    fn find_set_region_in_range(&self, item: usize, reqd_item_count: usize, range: Range<usize>) -> Option<usize>;
-    fn find_clear_region_in_range(&self, item: usize, reqd_item_count: usize, range: Range<usize>) -> Option<usize>;
+    fn find_set_region_in_range(
+        &self,
+        item: usize,
+        reqd_item_count: usize,
+        range: Range<usize>,
+    ) -> Option<usize>;
+    fn find_clear_region_in_range(
+        &self,
+        item: usize,
+        reqd_item_count: usize,
+        range: Range<usize>,
+    ) -> Option<usize>;
 }
 
 pub struct Bitmap {
-    bitmap: Cell<*mut Uintn>,
+    bitmap: Cell<*mut usize>,
     capacity_in_units: Cell<usize>,
     units_free: Cell<usize>,
-    size_in_uintn: Cell<usize>,
+    size_in_usize: Cell<usize>,
     size_in_pages: Cell<usize>,
     size_in_bytes: Cell<usize>,
 }
 impl Drop for Bitmap {
-    
     fn drop(&mut self) {
         // if our bitmap is not null, then we need to free the memory
         // associated with the bitmap or else we will leak memory
         if self.bitmap.get() != ptr::null_mut() {
             // we no longer have to worry about the frame allocator,
             // as all of its functions are now handled by vmem
-            unsafe { KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-                .dealloc_pages_contiguous(ptr_to_addr::<Uintn, VirtAddr>(self.bitmap.get() as *const Uintn), self.size_in_pages.get(), PageSize::Small); 
+            unsafe {
+                KERNEL_BASE_VAS_4
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .base_page_table
+                    .as_mut()
+                    .unwrap()
+                    .dealloc_pages_contiguous(
+                        ptr_to_addr::<usize, VirtAddr>(self.bitmap.get() as *const usize),
+                        self.size_in_pages.get(),
+                        PageSize::Small,
+                    );
             }
             self.bitmap.set(ptr::null_mut());
-        }        
+        }
     }
 }
 impl BitmapOps for Bitmap {
@@ -88,7 +110,7 @@ impl BitmapOps for Bitmap {
             bitmap: Cell::new(ptr::null_mut()),
             capacity_in_units: Cell::new(0),
             units_free: Cell::new(0),
-            size_in_uintn: Cell::new(0),
+            size_in_usize: Cell::new(0),
             size_in_pages: Cell::new(0),
             size_in_bytes: Cell::new(0),
         }
@@ -97,13 +119,12 @@ impl BitmapOps for Bitmap {
     // init without specifying a pre-allocated base (VirtAddr(0)) MUST NOT be used before the virtual memory
     // subsystem is initialized; that code path depends on map_page() being available
     fn init(&self, item_cap: usize, base_vaddr: VirtAddr, pre_allocated_base: VirtAddr) -> bool {
-
-        // figure out how many uintn's we need to cover the
+        // figure out how many usize's we need to cover the
         // requested capacity
-        let size_in_uintn = Bitmap::calc_size_in_uintn(item_cap);
+        let size_in_usize = Bitmap::calc_size_in_usize(item_cap);
 
         // calculate the size in bytes and pages
-        let size_in_bytes = size_in_uintn * MACHINE_UBYTES;
+        let size_in_bytes = size_in_usize * MACHINE_UBYTES;
         let size_in_pages = calc_pages_reqd(size_in_bytes, PageSize::Small);
 
         // if the pre-allocated base is 0, that means we need to allocate directly from the
@@ -114,70 +135,113 @@ impl BitmapOps for Bitmap {
         if pre_allocated_base.as_usize() == 0 {
             // we will first try to get contiguous memory for the bitmap. if that fails, we will
             // fall back to allocating pages individually
-            let bitmap_phys_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap()
-                .alloc_contiguous(size_in_bytes) };
+            let bitmap_phys_base = unsafe {
+                FRAME_ALLOCATOR_3
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .alloc_contiguous(size_in_bytes)
+            };
 
             if bitmap_phys_base.is_some() {
                 // we were able to successfully allocate contiguous memory for the bitmap
                 // now map the pages used for the bitmap
-                for i in (bitmap_phys_base.unwrap().as_usize()..(bitmap_phys_base.unwrap().as_usize() + size_in_bytes)).step_by(MEMORY_DEFAULT_PAGE_USIZE) {
-                    unsafe { 
-                        KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-                            .map_page(PhysAddr(i), 
-                                virt_base, 
-                                PageSize::Small, 
+                for i in (bitmap_phys_base.unwrap().as_usize()
+                    ..(bitmap_phys_base.unwrap().as_usize() + size_in_bytes))
+                    .step_by(MEMORY_DEFAULT_PAGE_USIZE)
+                {
+                    unsafe {
+                        KERNEL_BASE_VAS_4
+                            .lock()
+                            .as_mut()
+                            .unwrap()
+                            .base_page_table
+                            .as_mut()
+                            .unwrap()
+                            .map_page(
+                                PhysAddr(i),
+                                virt_base,
+                                PageSize::Small,
                                 PAGING_PRESENT | PAGING_WRITABLE | PAGING_WRITETHROUGH,
-                            );                        
+                            );
                     }
-                    virt_base.inner_inc_by_default_page_size();
-                }                                    
+                    virt_base.inner_inc_by_page_size(PageSize::Small);
+                }
             } else {
                 // we need to try and map the pages individually
                 let mut allocated_pages: usize = 0;
 
                 for _i in 0..size_in_pages {
-                    let page_base = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page() };
+                    let page_base =
+                        unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page() };
                     if page_base.is_some() {
                         allocated_pages += 1;
 
-                        unsafe { 
-                            KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
-                                .map_page(page_base.unwrap(), 
-                                    virt_base, 
-                                    PageSize::Small, 
-                                    PAGING_PRESENT | PAGING_WRITABLE | PAGING_WRITETHROUGH
-                                ); 
+                        unsafe {
+                            KERNEL_BASE_VAS_4
+                                .lock()
+                                .as_mut()
+                                .unwrap()
+                                .base_page_table
+                                .as_mut()
+                                .unwrap()
+                                .map_page(
+                                    page_base.unwrap(),
+                                    virt_base,
+                                    PageSize::Small,
+                                    PAGING_PRESENT | PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                                );
                         }
-                        virt_base.inner_inc_by_default_page_size();
+                        virt_base.inner_inc_by_page_size(PageSize::Small);
                     } else {
                         // we failed allocating individually, so we need to free the pages we did allocate
                         // and return false
                         virt_base = base_vaddr;
 
                         for _j in 0..allocated_pages {
-                            unsafe { 
-                                let phys_page = KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
+                            unsafe {
+                                let phys_page = KERNEL_BASE_VAS_4
+                                    .lock()
+                                    .as_mut()
+                                    .unwrap()
+                                    .base_page_table
+                                    .as_mut()
+                                    .unwrap()
                                     .virt_to_phys(virt_base);
-                                
-                                KERNEL_BASE_VAS_4.lock().as_mut().unwrap().base_page_table.as_mut().unwrap()
+
+                                KERNEL_BASE_VAS_4
+                                    .lock()
+                                    .as_mut()
+                                    .unwrap()
+                                    .base_page_table
+                                    .as_mut()
+                                    .unwrap()
                                     .unmap_page(virt_base, PageSize::Small);
-                                
-                                FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(phys_page);  
+
+                                FRAME_ALLOCATOR_3
+                                    .lock()
+                                    .as_mut()
+                                    .unwrap()
+                                    .dealloc_page(phys_page);
                             }
-                            virt_base.inner_inc_by_default_page_size();
+                            virt_base.inner_inc_by_page_size(PageSize::Small);
                         }
                         return false;
                     }
                 }
             }
-            self.bitmap.set(addr_to_ptr_mut::<Uintn, VirtAddr>(bitmap_phys_base.unwrap().into()));
+            self.bitmap.set(addr_to_ptr_mut::<usize, VirtAddr>(
+                bitmap_phys_base.unwrap().into(),
+            ));
         } else {
-            self.bitmap.set(addr_to_ptr_mut::<Uintn, VirtAddr>(pre_allocated_base.into()));
+            self.bitmap.set(addr_to_ptr_mut::<usize, VirtAddr>(
+                pre_allocated_base.into(),
+            ));
         }
 
         self.capacity_in_units.set(item_cap);
         self.units_free.set(item_cap);
-        self.size_in_uintn.set(size_in_uintn);
+        self.size_in_usize.set(size_in_usize);
         self.size_in_pages.set(size_in_pages);
         self.size_in_bytes.set(size_in_bytes);
 
@@ -185,9 +249,9 @@ impl BitmapOps for Bitmap {
     }
 
     #[inline(always)]
-    fn size_in_uintn(&self) -> usize {
+    fn size_in_usize(&self) -> usize {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
-        self.size_in_uintn.get()
+        self.size_in_usize.get()
     }
 
     #[inline(always)]
@@ -201,16 +265,16 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
         self.size_in_bytes.get()
     }
-    
+
     #[inline(always)]
-    fn calc_size_in_uintn(capacity: usize) -> usize {
+    fn calc_size_in_usize(capacity: usize) -> usize {
         (capacity + (MACHINE_UBITS - 1)) / MACHINE_UBITS
     }
 
     #[inline(always)]
     fn calc_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
-        let uintn_per_page = page_size.into_bits() / MACHINE_UBYTES;
-        Bitmap::calc_size_in_uintn(capacity) / uintn_per_page
+        let usize_per_page = page_size.into_bits() / MACHINE_UBYTES;
+        Bitmap::calc_size_in_usize(capacity) / usize_per_page
     }
 
     #[inline(always)]
@@ -224,17 +288,17 @@ impl BitmapOps for Bitmap {
     }
 
     #[inline(always)]
-    fn get_bitmap_ref_mut(&self) -> &mut [Uintn] {
+    fn get_bitmap_ref_mut(&self) -> &mut [usize] {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        unsafe { slice::from_raw_parts_mut::<Uintn>(self.bitmap.get(), self.size_in_uintn()) }
+        unsafe { slice::from_raw_parts_mut::<usize>(self.bitmap.get(), self.size_in_usize()) }
     }
 
     #[inline(always)]
-    fn get_bitmap_ref(&self) -> & [Uintn] {
+    fn get_bitmap_ref(&self) -> &[usize] {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        unsafe { slice::from_raw_parts::<Uintn>(self.bitmap.get(), self.size_in_uintn()) }
+        unsafe { slice::from_raw_parts::<usize>(self.bitmap.get(), self.size_in_usize()) }
     }
 
     fn set(&self, item: usize) {
@@ -311,12 +375,11 @@ impl BitmapOps for Bitmap {
             } else {
                 for z in start_bit_index..end_bit_index {
                     bitmap[start_index] |= 1 << z;
-                }                        
+                }
             }
-        }
-        else {
+        } else {
             for z in start_bit_index..MACHINE_UBITS {
-                bitmap[start_index] |= 1 << z;                    
+                bitmap[start_index] |= 1 << z;
             }
             if start_index + 1 == end_index {
                 for j in 0..=end_bit_index {
@@ -325,11 +388,11 @@ impl BitmapOps for Bitmap {
             } else {
                 if end_bit_index == 0 {
                     for j in (start_index + 1)..=end_index {
-                        bitmap[j] |= Uintn::MAX;
+                        bitmap[j] |= usize::MAX;
                     }
                 } else {
                     for j in (start_index + 1)..=(end_index - 1) {
-                        bitmap[j] |= Uintn::MAX;
+                        bitmap[j] |= usize::MAX;
                     }
                     for z in 0..=end_bit_index {
                         bitmap[end_index] |= 1 << z;
@@ -337,14 +400,15 @@ impl BitmapOps for Bitmap {
                 }
             }
         }
-        self.units_free.set(self.units_free.get() - (end_item - start_item) + 1);
+        self.units_free
+            .set(self.units_free.get() - (end_item - start_item) + 1);
     }
 
     fn clear_range(&self, start_item: usize, end_item: usize) {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref_mut();
-        
+
         // Indexes
         let start_index = start_item / MACHINE_UBITS;
         let start_bit_index = start_item % MACHINE_UBITS;
@@ -358,12 +422,11 @@ impl BitmapOps for Bitmap {
             } else {
                 for z in start_bit_index..end_bit_index {
                     bitmap[start_index] &= !(1 << z);
-                }                        
+                }
             }
-        }
-        else {
+        } else {
             for z in start_bit_index..MACHINE_UBITS {
-                bitmap[start_index] &= !(1 << z);                    
+                bitmap[start_index] &= !(1 << z);
             }
             if start_index + 1 == end_index {
                 for j in 0..=end_bit_index {
@@ -372,11 +435,11 @@ impl BitmapOps for Bitmap {
             } else {
                 if end_bit_index == 0 {
                     for j in (start_index + 1)..=end_index {
-                        bitmap[j] = Uintn::MIN;
+                        bitmap[j] = usize::MIN;
                     }
                 } else {
                     for j in (start_index + 1)..=(end_index - 1) {
-                        bitmap[j] = Uintn::MIN;
+                        bitmap[j] = usize::MIN;
                     }
                     for z in 0..=end_bit_index {
                         bitmap[end_index] &= !(1 << z);
@@ -384,16 +447,17 @@ impl BitmapOps for Bitmap {
                 }
             }
         }
-        self.units_free.set(self.units_free.get() + (end_item - start_item) + 1);
+        self.units_free
+            .set(self.units_free.get() + (end_item - start_item) + 1);
     }
 
     fn set_all(&self) {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        let uintn_idx_max = self.size_in_uintn();
+        let usize_idx_max = self.size_in_usize();
         let bitmap = self.get_bitmap_ref_mut();
-        for i in 0..uintn_idx_max {
-            bitmap[i] = Uintn::MAX;
+        for i in 0..usize_idx_max {
+            bitmap[i] = usize::MAX;
         }
         self.units_free.set(0);
     }
@@ -401,10 +465,10 @@ impl BitmapOps for Bitmap {
     fn clear_all(&self) {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        let uintn_idx_max = self.size_in_uintn();
+        let usize_idx_max = self.size_in_usize();
         let bitmap = self.get_bitmap_ref_mut();
-        for i in 0..uintn_idx_max {
-            bitmap[i] = Uintn::MIN;
+        for i in 0..usize_idx_max {
+            bitmap[i] = usize::MIN;
         }
         self.units_free.set(self.capacity_in_units.get());
     }
@@ -413,8 +477,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MIN {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MIN {
                 return false;
             }
         }
@@ -425,8 +489,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MAX {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MAX {
                 return false;
             }
         }
@@ -437,8 +501,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MIN {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MIN {
                 for j in 0..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) != 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -453,8 +517,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MAX {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MAX {
                 for j in 0..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) == 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -472,8 +536,8 @@ impl BitmapOps for Bitmap {
         let item_index = Bitmap::calc_item_index(item);
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
-        for i in item_index..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MIN {
+        for i in item_index..self.size_in_usize() {
+            if bitmap[i] != usize::MIN {
                 for j in item_bit_index..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) != 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -491,8 +555,8 @@ impl BitmapOps for Bitmap {
         let item_index = Bitmap::calc_item_index(item);
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
-        for i in item_index..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MAX {
+        for i in item_index..self.size_in_usize() {
+            if bitmap[i] != usize::MAX {
                 for j in item_bit_index..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) == 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -507,8 +571,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in (0..self.size_in_uintn()).rev() {
-            if bitmap[i] != Uintn::MIN {
+        for i in (0..self.size_in_usize()).rev() {
+            if bitmap[i] != usize::MIN {
                 for j in (0..MACHINE_UBITS).rev() {
                     if (bitmap[i] & (1 << j)) != 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -523,8 +587,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        for i in (0..self.size_in_uintn()).rev() {
-            if bitmap[i] != Uintn::MAX {
+        for i in (0..self.size_in_usize()).rev() {
+            if bitmap[i] != usize::MAX {
                 for j in (0..MACHINE_UBITS).rev() {
                     if (bitmap[i] & (1 << j)) == 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -543,7 +607,7 @@ impl BitmapOps for Bitmap {
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
         for i in (0..item_index).rev() {
-            if bitmap[i] != Uintn::MIN {
+            if bitmap[i] != usize::MIN {
                 for j in (0..item_bit_index).rev() {
                     if (bitmap[i] & (1 << j)) != 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -562,7 +626,7 @@ impl BitmapOps for Bitmap {
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
         for i in (0..item_index).rev() {
-            if bitmap[i] != Uintn::MAX {
+            if bitmap[i] != usize::MAX {
                 for j in (0..item_bit_index).rev() {
                     if (bitmap[i] & (1 << j)) == 0 {
                         return Some((i * MACHINE_UBITS) + j);
@@ -581,8 +645,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MIN {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MIN {
                 for j in 0..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) != 0 {
                         if !found {
@@ -615,8 +679,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in 0..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MAX {
+        for i in 0..self.size_in_usize() {
+            if bitmap[i] != usize::MAX {
                 for j in 0..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) == 0 {
                         if !found {
@@ -640,7 +704,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_next_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -651,8 +715,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in item_index..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MIN {
+        for i in item_index..self.size_in_usize() {
+            if bitmap[i] != usize::MIN {
                 for j in item_bit_index..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) != 0 {
                         if !found {
@@ -676,7 +740,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_next_clear_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -687,8 +751,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in item_index..self.size_in_uintn() {
-            if bitmap[i] != Uintn::MAX {
+        for i in item_index..self.size_in_usize() {
+            if bitmap[i] != usize::MAX {
                 for j in item_bit_index..MACHINE_UBITS {
                     if (bitmap[i] & (1 << j)) == 0 {
                         if !found {
@@ -721,8 +785,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in (0..self.size_in_uintn()).rev() {
-            if bitmap[i] != Uintn::MIN {
+        for i in (0..self.size_in_usize()).rev() {
+            if bitmap[i] != usize::MIN {
                 for j in (0..MACHINE_UBITS).rev() {
                     if (bitmap[i] & (1 << j)) != 0 {
                         if !found {
@@ -755,8 +819,8 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        for i in (0..self.size_in_uintn()).rev() {
-            if bitmap[i] != Uintn::MAX {
+        for i in (0..self.size_in_usize()).rev() {
+            if bitmap[i] != usize::MAX {
                 for j in (0..MACHINE_UBITS).rev() {
                     if (bitmap[i] & (1 << j)) == 0 {
                         if !found {
@@ -780,7 +844,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_prev_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -792,7 +856,7 @@ impl BitmapOps for Bitmap {
         let mut end = 0;
 
         for i in (0..item_index).rev() {
-            if bitmap[i] != Uintn::MIN {
+            if bitmap[i] != usize::MIN {
                 for j in (0..item_bit_index).rev() {
                     if (bitmap[i] & (1 << j)) != 0 {
                         if !found {
@@ -828,7 +892,7 @@ impl BitmapOps for Bitmap {
         let mut end = 0;
 
         for i in (0..item_index).rev() {
-            if bitmap[i] != Uintn::MAX {
+            if bitmap[i] != usize::MAX {
                 for j in (0..item_bit_index).rev() {
                     if (bitmap[i] & (1 << j)) == 0 {
                         if !found {
@@ -852,7 +916,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_set_from_item(&self, item: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -860,7 +924,7 @@ impl BitmapOps for Bitmap {
         let item_index = Bitmap::calc_item_index(item);
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
-        if bitmap[item_index] != Uintn::MIN {
+        if bitmap[item_index] != usize::MIN {
             for j in item_bit_index..MACHINE_UBITS {
                 if (bitmap[item_index] & (1 << j)) != 0 {
                     return Some((item_index * MACHINE_UBITS) + j);
@@ -869,7 +933,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_clear_from_item(&self, item: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -877,7 +941,7 @@ impl BitmapOps for Bitmap {
         let item_index = Bitmap::calc_item_index(item);
         let item_bit_index = Bitmap::calc_item_bit_index(item);
 
-        if bitmap[item_index] != Uintn::MAX {
+        if bitmap[item_index] != usize::MAX {
             for j in item_bit_index..MACHINE_UBITS {
                 if (bitmap[item_index] & (1 << j)) == 0 {
                     return Some((item_index * MACHINE_UBITS) + j);
@@ -886,7 +950,7 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     fn find_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
@@ -897,7 +961,7 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        if bitmap[item_index] != Uintn::MIN {
+        if bitmap[item_index] != usize::MIN {
             for j in item_bit_index..MACHINE_UBITS {
                 if (bitmap[item_index] & (1 << j)) != 0 {
                     if !found {
@@ -931,7 +995,7 @@ impl BitmapOps for Bitmap {
         let mut start = 0;
         let mut end = 0;
 
-        if bitmap[item_index] != Uintn::MAX {
+        if bitmap[item_index] != usize::MAX {
             for j in item_bit_index..MACHINE_UBITS {
                 if (bitmap[item_index] & (1 << j)) == 0 {
                     if !found {
@@ -954,12 +1018,17 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     // Starting with the specified item slot, will search for a set region of size
     // reqd_item_count. This will short circuit if item > range.end.
     // The range.start and range.end are bounds ONLY for the start of the set region.
     // The start plus the region's item count required can exceed region.end.
-    fn find_set_region_in_range(&self, item: usize, reqd_item_count: usize, range: Range<usize>) -> Option<usize> {
+    fn find_set_region_in_range(
+        &self,
+        item: usize,
+        reqd_item_count: usize,
+        range: Range<usize>,
+    ) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         if item > range.end {
@@ -987,12 +1056,12 @@ impl BitmapOps for Bitmap {
         // is greater; then we iterate through the bitmap until we either
         // find a set region with the required number of items, or we reach
         // range.end. if we reach range.end, we return None.
-        for i in item_index..self.size_in_uintn(){
+        for i in item_index..self.size_in_usize() {
             if !found && i > end_index {
                 return None;
             }
 
-            if bitmap[i] == Uintn::MIN {
+            if bitmap[i] == usize::MIN {
                 found = false;
                 continue;
             }
@@ -1023,12 +1092,17 @@ impl BitmapOps for Bitmap {
         }
         None
     }
-    
+
     // Starting with the specified item slot, will search for a clear region of size
     // reqd_item_count. This will short circuit if item > range.end.
     // The range.start and range.end are bounds ONLY for the start of the clear region.
     // The start plus the region's item count required can exceed region.end.
-    fn find_clear_region_in_range(&self, item: usize, reqd_item_count: usize, range: Range<usize>) -> Option<usize> {
+    fn find_clear_region_in_range(
+        &self,
+        item: usize,
+        reqd_item_count: usize,
+        range: Range<usize>,
+    ) -> Option<usize> {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         if item > range.end {
@@ -1056,12 +1130,12 @@ impl BitmapOps for Bitmap {
         // is greater; then we iterate through the bitmap until we either
         // find a clear region with the required number of items, or we reach
         // range.end. if we reach range.end, we return None.
-        for i in item_index..self.size_in_uintn(){
+        for i in item_index..self.size_in_usize() {
             if !found && i > end_index {
                 return None;
             }
 
-            if bitmap[i] == Uintn::MAX {
+            if bitmap[i] == usize::MAX {
                 found = false;
                 continue;
             }

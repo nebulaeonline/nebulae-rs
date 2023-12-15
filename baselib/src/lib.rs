@@ -1,58 +1,50 @@
 #![no_std]
-#![feature(abi_x86_interrupt)]
 #![feature(linkage)]
 #![feature(panic_info_message)]
-#![feature(const_trait_impl)]
 #![feature(stmt_expr_attributes)]
 #![feature(iter_advance_by)]
+#![feature(const_trait_impl)]
+#![feature(abi_x86_interrupt)]
 
-pub mod constants;
-#[cfg(target_pointer_width = "64")]
-pub mod constants64;
-pub mod common;
-pub mod debug_assert;
-pub mod bit;
-pub mod cpu;
-pub mod memory;
+// #![allow(incomplete_features)]
+// #![feature(generic_const_exprs)]
+
+// baselib mods
 pub mod bitmap;
+pub mod common;
+pub mod cpu;
 pub mod frame_alloc;
-pub mod kalloc;
 pub mod interrupts;
-pub mod status;
-pub mod util;
+pub mod kalloc;
+pub mod memory;
 pub mod panic;
+pub mod status;
 
+// baselib::arch mods
 pub mod arch {
     #[cfg(target_arch = "aarch64")]
     pub mod aarch64 {
         pub mod asm;
-        pub mod serial;
-        pub mod cpu;
-        pub mod vmem64;
         pub mod async_exception;
+        pub mod cpu;
         pub mod exception;
-
-        pub mod constants;
+        pub mod serial;
+        pub mod vmem64;
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     pub mod x86 {
         pub mod asm;
-        pub mod serial;
-        pub mod cpu;
         pub mod cache_descriptor;
+        pub mod cpu;
+        pub mod serial;
 
-        #[cfg(target_arch = "x86")]
-        pub mod constants_x32;
         #[cfg(target_arch = "x86")]
         pub mod vmem32;
-
-        #[cfg(target_arch = "x86_64")]
-        pub mod constants_x64;
         #[cfg(target_arch = "x86_64")]
         pub mod vmem64;
-        
+
         #[cfg(target_arch = "x86_64")]
-        pub mod interrupts;                
+        pub mod interrupts;
     }
 }

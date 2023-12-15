@@ -19,14 +19,16 @@ lazy_static! {
         idt.double_fault.set_handler_fn(double_fault_handler);
         idt.invalid_tss.set_handler_fn(invalid_tss_handler);
         idt.segment_not_present.set_handler_fn(segment_np_handler);
-        idt.stack_segment_fault.set_handler_fn(stack_segment_handler);
+        idt.stack_segment_fault
+            .set_handler_fn(stack_segment_handler);
         idt.general_protection_fault.set_handler_fn(gpf_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
         idt.x87_floating_point.set_handler_fn(x87_fp_handler);
         idt.alignment_check.set_handler_fn(alignment_check_handler);
         idt.machine_check.set_handler_fn(machine_check_handler);
         idt.simd_floating_point.set_handler_fn(simd_fp_handler);
-        idt.virtualization.set_handler_fn(virtualization_fault_handler);
+        idt.virtualization
+            .set_handler_fn(virtualization_fault_handler);
         idt.security_exception.set_handler_fn(security_handler);
 
         idt
@@ -78,19 +80,37 @@ extern "x86-interrupt" fn invalid_tss_handler(stack_frame: InterruptStackFrame, 
 }
 
 extern "x86-interrupt" fn segment_np_handler(stack_frame: InterruptStackFrame, data: u64) {
-    serial_println!("EXCEPTION: SEGMENT NOT PRESENT FAULT ({})\n{:#?}", data, stack_frame);
+    serial_println!(
+        "EXCEPTION: SEGMENT NOT PRESENT FAULT ({})\n{:#?}",
+        data,
+        stack_frame
+    );
 }
 
 extern "x86-interrupt" fn stack_segment_handler(stack_frame: InterruptStackFrame, data: u64) {
-    serial_println!("EXCEPTION: STACK SEGMENT FAULT ({})\n{:#?}", data, stack_frame);
+    serial_println!(
+        "EXCEPTION: STACK SEGMENT FAULT ({})\n{:#?}",
+        data,
+        stack_frame
+    );
 }
 
 extern "x86-interrupt" fn gpf_handler(stack_frame: InterruptStackFrame, data: u64) {
-    serial_println!("EXCEPTION: GENERAL PROTECTION FAULT ({})\n{:#?}", data, stack_frame);
+    serial_println!(
+        "EXCEPTION: GENERAL PROTECTION FAULT ({})\n{:#?}",
+        data,
+        stack_frame
+    );
 }
 
-extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, page_fault_data: PageFaultErrorCode) {
-    panic!("EXCEPTION: PAGE FAULT ({:?})\n{:#?}", page_fault_data, stack_frame);
+extern "x86-interrupt" fn page_fault_handler(
+    stack_frame: InterruptStackFrame,
+    page_fault_data: PageFaultErrorCode,
+) {
+    panic!(
+        "EXCEPTION: PAGE FAULT ({:?})\n{:#?}",
+        page_fault_data, stack_frame
+    );
 }
 
 extern "x86-interrupt" fn x87_fp_handler(stack_frame: InterruptStackFrame) {

@@ -1,10 +1,9 @@
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[allow(dead_code)] // TODO: Remove when in use
+use crate::common::base::*;
 
-use crate::bit::*;
-use crate::constants::*;
-use crate::arch::x86::cache_descriptor::*;
 use crate::arch::x86::asm::*;
+use crate::arch::x86::cache_descriptor::*;
 
 use bitfield_struct::*;
 
@@ -288,14 +287,14 @@ pub struct Cpu {
     pub id: u64,
     pub cohort_id: u64,
     pub physical: bool,
-    pub info: CpuInfo,    
+    pub info: CpuInfo,
 }
 
 #[allow(dead_code)] // TODO: Remove when in use
 impl Cpu {
     pub fn new() -> Cpu {
-        let info = CpuInfo { 
-            vendor_id: [0;12], 
+        let info = CpuInfo {
+            vendor_id: [0; 12],
             max_cpuid_level: 0,
             extended_model: 0,
             extended_family: 0,
@@ -320,7 +319,7 @@ impl Cpu {
             cache_descriptor_count: 0,
             mode4_cache_info: false,
             mode4_tlb_info: false,
-            features: CpuFeatures::new() 
+            features: CpuFeatures::new()
                 .with_feat_hypervisor_present(false)
                 .with_feat_rdrand(false)
                 .with_feat_f16c(false)
@@ -439,9 +438,9 @@ impl Cpu {
                 .with_feat_avx512qvnniw(false),
         };
 
-        let mut cpu = Cpu { 
-            id: 0, 
-            cohort_id: 0, 
+        let mut cpu = Cpu {
+            id: 0,
+            cohort_id: 0,
             physical: true,
             info: info,
         };
@@ -482,68 +481,188 @@ impl Cpu {
             cpu.info.default_apic_id = ((regs.ebx & BYTE3_U32) >> 24) as u8;
 
             // Individual feature flags (ECX)
-            cpu.info.features.set_feat_hypervisor_present(is_bit_set32(regs.ecx, 31));
-            cpu.info.features.set_feat_rdrand(is_bit_set32(regs.ecx, 30));
-            cpu.info.features.set_feat_f16c(is_bit_set32(regs.ecx, 29));
-            cpu.info.features.set_feat_avx(is_bit_set32(regs.ecx, 28));
-            cpu.info.features.set_feat_osxsave(is_bit_set32(regs.ecx, 27));
-            cpu.info.features.set_feat_xsave(is_bit_set32(regs.ecx, 26));
-            cpu.info.features.set_feat_aes(is_bit_set32(regs.ecx, 25));
-            cpu.info.features.set_feat_tsc_deadline(is_bit_set32(regs.ecx, 24));
-            cpu.info.features.set_feat_popcnt(is_bit_set32(regs.ecx, 23));
-            cpu.info.features.set_feat_movbe(is_bit_set32(regs.ecx, 22));
-            cpu.info.features.set_feat_x2apic(is_bit_set32(regs.ecx, 21));
-            cpu.info.features.set_feat_sse42(is_bit_set32(regs.ecx, 20));
-            cpu.info.features.set_feat_sse41(is_bit_set32(regs.ecx, 19));
-            cpu.info.features.set_feat_dca(is_bit_set32(regs.ecx, 18));
-            cpu.info.features.set_feat_pcid(is_bit_set32(regs.ecx, 17));
-            cpu.info.features.set_feat_pdcm(is_bit_set32(regs.ecx, 15));
-            cpu.info.features.set_feat_etprd(is_bit_set32(regs.ecx, 14));
-            cpu.info.features.set_feat_cx16(is_bit_set32(regs.ecx, 13));
-            cpu.info.features.set_feat_fma(is_bit_set32(regs.ecx, 12));
-            cpu.info.features.set_feat_sdbg(is_bit_set32(regs.ecx, 11));
-            cpu.info.features.set_feat_cid(is_bit_set32(regs.ecx, 10));
-            cpu.info.features.set_feat_ssse3(is_bit_set32(regs.ecx, 9));
-            cpu.info.features.set_feat_tm2(is_bit_set32(regs.ecx, 8));
-            cpu.info.features.set_feat_est(is_bit_set32(regs.ecx, 7));
-            cpu.info.features.set_feat_smx(is_bit_set32(regs.ecx, 6));
-            cpu.info.features.set_feat_vmx(is_bit_set32(regs.ecx, 5));
-            cpu.info.features.set_feat_dscpl(is_bit_set32(regs.ecx, 4));
-            cpu.info.features.set_feat_monitor(is_bit_set32(regs.ecx, 3));
-            cpu.info.features.set_feat_dtes64(is_bit_set32(regs.ecx, 2));
-            cpu.info.features.set_feat_pclmul(is_bit_set32(regs.ecx, 1));
-            cpu.info.features.set_feat_sse3(is_bit_set32(regs.ecx, 0));
+            cpu.info
+                .features
+                .set_feat_hypervisor_present(u32bit::is_bit_set(regs.ecx, 31));
+            cpu.info
+                .features
+                .set_feat_rdrand(u32bit::is_bit_set(regs.ecx, 30));
+            cpu.info
+                .features
+                .set_feat_f16c(u32bit::is_bit_set(regs.ecx, 29));
+            cpu.info
+                .features
+                .set_feat_avx(u32bit::is_bit_set(regs.ecx, 28));
+            cpu.info
+                .features
+                .set_feat_osxsave(u32bit::is_bit_set(regs.ecx, 27));
+            cpu.info
+                .features
+                .set_feat_xsave(u32bit::is_bit_set(regs.ecx, 26));
+            cpu.info
+                .features
+                .set_feat_aes(u32bit::is_bit_set(regs.ecx, 25));
+            cpu.info
+                .features
+                .set_feat_tsc_deadline(u32bit::is_bit_set(regs.ecx, 24));
+            cpu.info
+                .features
+                .set_feat_popcnt(u32bit::is_bit_set(regs.ecx, 23));
+            cpu.info
+                .features
+                .set_feat_movbe(u32bit::is_bit_set(regs.ecx, 22));
+            cpu.info
+                .features
+                .set_feat_x2apic(u32bit::is_bit_set(regs.ecx, 21));
+            cpu.info
+                .features
+                .set_feat_sse42(u32bit::is_bit_set(regs.ecx, 20));
+            cpu.info
+                .features
+                .set_feat_sse41(u32bit::is_bit_set(regs.ecx, 19));
+            cpu.info
+                .features
+                .set_feat_dca(u32bit::is_bit_set(regs.ecx, 18));
+            cpu.info
+                .features
+                .set_feat_pcid(u32bit::is_bit_set(regs.ecx, 17));
+            cpu.info
+                .features
+                .set_feat_pdcm(u32bit::is_bit_set(regs.ecx, 15));
+            cpu.info
+                .features
+                .set_feat_etprd(u32bit::is_bit_set(regs.ecx, 14));
+            cpu.info
+                .features
+                .set_feat_cx16(u32bit::is_bit_set(regs.ecx, 13));
+            cpu.info
+                .features
+                .set_feat_fma(u32bit::is_bit_set(regs.ecx, 12));
+            cpu.info
+                .features
+                .set_feat_sdbg(u32bit::is_bit_set(regs.ecx, 11));
+            cpu.info
+                .features
+                .set_feat_cid(u32bit::is_bit_set(regs.ecx, 10));
+            cpu.info
+                .features
+                .set_feat_ssse3(u32bit::is_bit_set(regs.ecx, 9));
+            cpu.info
+                .features
+                .set_feat_tm2(u32bit::is_bit_set(regs.ecx, 8));
+            cpu.info
+                .features
+                .set_feat_est(u32bit::is_bit_set(regs.ecx, 7));
+            cpu.info
+                .features
+                .set_feat_smx(u32bit::is_bit_set(regs.ecx, 6));
+            cpu.info
+                .features
+                .set_feat_vmx(u32bit::is_bit_set(regs.ecx, 5));
+            cpu.info
+                .features
+                .set_feat_dscpl(u32bit::is_bit_set(regs.ecx, 4));
+            cpu.info
+                .features
+                .set_feat_monitor(u32bit::is_bit_set(regs.ecx, 3));
+            cpu.info
+                .features
+                .set_feat_dtes64(u32bit::is_bit_set(regs.ecx, 2));
+            cpu.info
+                .features
+                .set_feat_pclmul(u32bit::is_bit_set(regs.ecx, 1));
+            cpu.info
+                .features
+                .set_feat_sse3(u32bit::is_bit_set(regs.ecx, 0));
 
             // Individual feature flags (EDX)
-            cpu.info.features.set_feat_pbe(is_bit_set32(regs.edx, 31));
-            cpu.info.features.set_feat_tm1(is_bit_set32(regs.edx, 29));
-            cpu.info.features.set_feat_hyperthreading(is_bit_set32(regs.edx, 28));
-            cpu.info.features.set_feat_selfsnoop(is_bit_set32(regs.edx, 27));
-            cpu.info.features.set_feat_sse2(is_bit_set32(regs.edx, 26));
-            cpu.info.features.set_feat_sse(is_bit_set32(regs.edx, 25));
-            cpu.info.features.set_feat_fxsr(is_bit_set32(regs.edx, 24));
-            cpu.info.features.set_feat_mmx(is_bit_set32(regs.edx, 23));
-            cpu.info.features.set_feat_acpi_therm(is_bit_set32(regs.edx, 22));
-            cpu.info.features.set_feat_dtes(is_bit_set32(regs.edx, 21));
-            cpu.info.features.set_feat_clfl(is_bit_set32(regs.edx, 19));
-            cpu.info.features.set_feat_psn(is_bit_set32(regs.edx, 18));
-            cpu.info.features.set_feat_pse36(is_bit_set32(regs.edx, 17));
-            cpu.info.features.set_feat_pat(is_bit_set32(regs.edx, 16));
-            cpu.info.features.set_feat_cmov(is_bit_set32(regs.edx, 15));
-            cpu.info.features.set_feat_mca(is_bit_set32(regs.edx, 14));
-            cpu.info.features.set_feat_pge(is_bit_set32(regs.edx, 13));
-            cpu.info.features.set_feat_mtrr(is_bit_set32(regs.edx, 12));
-            cpu.info.features.set_feat_sysenter(is_bit_set32(regs.edx, 11));
-            cpu.info.features.set_feat_apic(is_bit_set32(regs.edx, 9));
-            cpu.info.features.set_feat_cx8(is_bit_set32(regs.edx, 8));
-            cpu.info.features.set_feat_mce(is_bit_set32(regs.edx, 7));
-            cpu.info.features.set_feat_pae(is_bit_set32(regs.edx, 6));
-            cpu.info.features.set_feat_msr(is_bit_set32(regs.edx, 5));
-            cpu.info.features.set_feat_tsc(is_bit_set32(regs.edx, 4));
-            cpu.info.features.set_feat_pse(is_bit_set32(regs.edx, 3));
-            cpu.info.features.set_feat_de(is_bit_set32(regs.edx, 2));
-            cpu.info.features.set_feat_vme(is_bit_set32(regs.edx, 1));
-            cpu.info.features.set_feat_fpu(is_bit_set32(regs.edx, 0));
+            cpu.info
+                .features
+                .set_feat_pbe(u32bit::is_bit_set(regs.edx, 31));
+            cpu.info
+                .features
+                .set_feat_tm1(u32bit::is_bit_set(regs.edx, 29));
+            cpu.info
+                .features
+                .set_feat_hyperthreading(u32bit::is_bit_set(regs.edx, 28));
+            cpu.info
+                .features
+                .set_feat_selfsnoop(u32bit::is_bit_set(regs.edx, 27));
+            cpu.info
+                .features
+                .set_feat_sse2(u32bit::is_bit_set(regs.edx, 26));
+            cpu.info
+                .features
+                .set_feat_sse(u32bit::is_bit_set(regs.edx, 25));
+            cpu.info
+                .features
+                .set_feat_fxsr(u32bit::is_bit_set(regs.edx, 24));
+            cpu.info
+                .features
+                .set_feat_mmx(u32bit::is_bit_set(regs.edx, 23));
+            cpu.info
+                .features
+                .set_feat_acpi_therm(u32bit::is_bit_set(regs.edx, 22));
+            cpu.info
+                .features
+                .set_feat_dtes(u32bit::is_bit_set(regs.edx, 21));
+            cpu.info
+                .features
+                .set_feat_clfl(u32bit::is_bit_set(regs.edx, 19));
+            cpu.info
+                .features
+                .set_feat_psn(u32bit::is_bit_set(regs.edx, 18));
+            cpu.info
+                .features
+                .set_feat_pse36(u32bit::is_bit_set(regs.edx, 17));
+            cpu.info
+                .features
+                .set_feat_pat(u32bit::is_bit_set(regs.edx, 16));
+            cpu.info
+                .features
+                .set_feat_cmov(u32bit::is_bit_set(regs.edx, 15));
+            cpu.info
+                .features
+                .set_feat_mca(u32bit::is_bit_set(regs.edx, 14));
+            cpu.info
+                .features
+                .set_feat_pge(u32bit::is_bit_set(regs.edx, 13));
+            cpu.info
+                .features
+                .set_feat_mtrr(u32bit::is_bit_set(regs.edx, 12));
+            cpu.info
+                .features
+                .set_feat_sysenter(u32bit::is_bit_set(regs.edx, 11));
+            cpu.info
+                .features
+                .set_feat_apic(u32bit::is_bit_set(regs.edx, 9));
+            cpu.info
+                .features
+                .set_feat_cx8(u32bit::is_bit_set(regs.edx, 8));
+            cpu.info
+                .features
+                .set_feat_mce(u32bit::is_bit_set(regs.edx, 7));
+            cpu.info
+                .features
+                .set_feat_pae(u32bit::is_bit_set(regs.edx, 6));
+            cpu.info
+                .features
+                .set_feat_msr(u32bit::is_bit_set(regs.edx, 5));
+            cpu.info
+                .features
+                .set_feat_tsc(u32bit::is_bit_set(regs.edx, 4));
+            cpu.info
+                .features
+                .set_feat_pse(u32bit::is_bit_set(regs.edx, 3));
+            cpu.info
+                .features
+                .set_feat_de(u32bit::is_bit_set(regs.edx, 2));
+            cpu.info
+                .features
+                .set_feat_vme(u32bit::is_bit_set(regs.edx, 1));
+            cpu.info
+                .features
+                .set_feat_fpu(u32bit::is_bit_set(regs.edx, 0));
         }
 
         // CPUID / EAX == 2
@@ -552,141 +671,201 @@ impl Cpu {
             let mut i = 0;
 
             debug_assert!(regs.eax & BYTE0_U32 == 0x01);
-            
+
             // clear bit 31 indicates this register has
             // valid descriptors
             // EAX has bytes 1-3 (byte 0 is always 01H)
-            if is_bit_clear32(regs.eax, 31) {
+            if u32bit::is_bit_clear(regs.eax, 31) {
                 if regs.eax & BYTE1_U32 != 0 {
                     let val = (regs.eax & BYTE1_U32 >> 8) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.eax & BYTE2_U32 != 0 {
                     let val = (regs.eax & BYTE2_U32 >> 16) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.eax & BYTE3_U32 != 0 {
                     let val = (regs.eax & BYTE3_U32 >> 24) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
             }
 
             // EBX, ECX & EDX all have all 4 bytes if bit 31 is clear
             // some may contain null entries however
-            if is_bit_clear32(regs.ebx, 31) {
+            if u32bit::is_bit_clear(regs.ebx, 31) {
                 if regs.ebx & BYTE0_U32 != 0 {
                     let val = (regs.ebx & BYTE0_U32) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ebx & BYTE1_U32 != 0 {
                     let val = (regs.ebx & BYTE1_U32 >> 8) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ebx & BYTE2_U32 != 0 {
                     let val = (regs.ebx & BYTE2_U32 >> 16) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ebx & BYTE3_U32 != 0 {
                     let val = (regs.ebx & BYTE3_U32 >> 24) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
             }
 
-            if is_bit_clear32(regs.ecx, 31) {
+            if u32bit::is_bit_clear(regs.ecx, 31) {
                 if regs.ecx & BYTE0_U32 != 0 {
                     let val = (regs.ecx & BYTE0_U32) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ecx & BYTE1_U32 != 0 {
                     let val = (regs.ecx & BYTE1_U32 >> 8) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ecx & BYTE2_U32 != 0 {
                     let val = (regs.ecx & BYTE2_U32 >> 16) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.ecx & BYTE3_U32 != 0 {
                     let val = (regs.ecx & BYTE3_U32 >> 24) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
             }
 
-            if is_bit_clear32(regs.edx, 31) {
+            if u32bit::is_bit_clear(regs.edx, 31) {
                 if regs.edx & BYTE0_U32 != 0 {
                     let val = (regs.edx & BYTE0_U32) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.edx & BYTE1_U32 != 0 {
                     let val = (regs.edx & BYTE1_U32 >> 8) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.edx & BYTE2_U32 != 0 {
                     let val = (regs.edx & BYTE2_U32 >> 16) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
                 if regs.edx & BYTE3_U32 != 0 {
                     let val = (regs.edx & BYTE3_U32 >> 24) as usize;
                     cpu.info.cache_descriptors[i] = CACHE_CONFIGS[val];
                     i += 1;
 
-                    if val == 0xFE { cpu.info.mode4_tlb_info = true; }
-                    if val == 0xFF { cpu.info.mode4_cache_info = true; }
+                    if val == 0xFE {
+                        cpu.info.mode4_tlb_info = true;
+                    }
+                    if val == 0xFF {
+                        cpu.info.mode4_cache_info = true;
+                    }
                 }
             }
             cpu.info.cache_descriptor_count = i as u8;
@@ -698,63 +877,173 @@ impl Cpu {
 
             //let max_sublevel = regs.eax;
 
-            cpu.info.features_ext.set_feat_avx512vl(is_bit_set32(regs.ebx, 31));
-            cpu.info.features_ext.set_feat_avx512bw(is_bit_set32(regs.ebx, 30));
-            cpu.info.features_ext.set_feat_sha(is_bit_set32(regs.ebx, 29));
-            cpu.info.features_ext.set_feat_avx512cd(is_bit_set32(regs.ebx, 28));
-            cpu.info.features_ext.set_feat_avx512er(is_bit_set32(regs.ebx, 27));
-            cpu.info.features_ext.set_feat_avx512pf(is_bit_set32(regs.ebx, 26));
-            cpu.info.features_ext.set_feat_processor_trace(is_bit_set32(regs.ebx, 25));
-            cpu.info.features_ext.set_feat_clwb(is_bit_set32(regs.ebx, 24));
-            cpu.info.features_ext.set_feat_clflushopt(is_bit_set32(regs.ebx, 23));
-            cpu.info.features_ext.set_feat_pcommit(is_bit_set32(regs.ebx, 22));
-            cpu.info.features_ext.set_feat_avx512ifma(is_bit_set32(regs.ebx, 21));
-            cpu.info.features_ext.set_feat_smap(is_bit_set32(regs.ebx, 20));
-            cpu.info.features_ext.set_feat_adx(is_bit_set32(regs.ebx, 19));
-            cpu.info.features_ext.set_feat_rdseed(is_bit_set32(regs.ebx, 18));
-            cpu.info.features_ext.set_feat_avx512dq(is_bit_set32(regs.ebx, 17));
-            cpu.info.features_ext.set_feat_avx512f(is_bit_set32(regs.ebx, 16));
-            cpu.info.features_ext.set_feat_pqe(is_bit_set32(regs.ebx, 15));
-            cpu.info.features_ext.set_feat_mpx(is_bit_set32(regs.ebx, 14));
-            cpu.info.features_ext.set_feat_fpcsds(is_bit_set32(regs.ebx, 13));
-            cpu.info.features_ext.set_feat_pqm(is_bit_set32(regs.ebx, 12));
-            cpu.info.features_ext.set_feat_rtm(is_bit_set32(regs.ebx, 11));
-            cpu.info.features_ext.set_feat_invpcid(is_bit_set32(regs.ebx, 10));
-            cpu.info.features_ext.set_feat_erms(is_bit_set32(regs.ebx, 9));
-            cpu.info.features_ext.set_feat_bmi2(is_bit_set32(regs.ebx, 8));
-            cpu.info.features_ext.set_feat_smep(is_bit_set32(regs.ebx, 7));
-            cpu.info.features_ext.set_feat_fpdp(is_bit_set32(regs.ebx, 6));
-            cpu.info.features_ext.set_feat_avx2(is_bit_set32(regs.ebx, 5));
-            cpu.info.features_ext.set_feat_hle(is_bit_set32(regs.ebx, 4));
-            cpu.info.features_ext.set_feat_bmi1(is_bit_set32(regs.ebx, 3));
-            cpu.info.features_ext.set_feat_sgx(is_bit_set32(regs.ebx, 2));
-            cpu.info.features_ext.set_feat_tsc_adjust(is_bit_set32(regs.ebx, 1));
-            cpu.info.features_ext.set_feat_fsgsbase(is_bit_set32(regs.ebx, 0));
-            cpu.info.features_ext.set_feat_sgx_lc(is_bit_set32(regs.ecx, 30));
-            cpu.info.features_ext.set_feat_rdpid(is_bit_set32(regs.ecx, 22));
-            cpu.info.features_ext.set_feat_va57(is_bit_set32(regs.ecx, 16));
-            cpu.info.features_ext.set_feat_avx512vp_dq(is_bit_set32(regs.ecx, 14));
-            cpu.info.features_ext.set_feat_tme(is_bit_set32(regs.ecx, 13));
-            cpu.info.features_ext.set_feat_avx512bitalg(is_bit_set32(regs.ecx, 12));
-            cpu.info.features_ext.set_feat_avx512vnni(is_bit_set32(regs.ecx, 11));
-            cpu.info.features_ext.set_feat_vpcl(is_bit_set32(regs.ecx, 10));
-            cpu.info.features_ext.set_feat_vaes(is_bit_set32(regs.ecx, 9));
-            cpu.info.features_ext.set_feat_gfni(is_bit_set32(regs.ecx, 8));
-            cpu.info.features_ext.set_feat_cet(is_bit_set32(regs.ecx, 7));
-            cpu.info.features_ext.set_feat_avx512vbmi2(is_bit_set32(regs.ecx, 6));
-            cpu.info.features_ext.set_feat_ospke(is_bit_set32(regs.ecx, 4));
-            cpu.info.features_ext.set_feat_pku(is_bit_set32(regs.ecx, 3));
-            cpu.info.features_ext.set_feat_umip(is_bit_set32(regs.ecx, 2));
-            cpu.info.features_ext.set_feat_avx512vbmi(is_bit_set32(regs.ecx, 1));
-            cpu.info.features_ext.set_feat_prefetchwt1(is_bit_set32(regs.ecx, 0));
-            cpu.info.features_ext.set_feat_arch_cap_msr(is_bit_set32(regs.ecx, 29));
-            cpu.info.features_ext.set_feat_stibp(is_bit_set32(regs.ecx, 27));
-            cpu.info.features_ext.set_feat_ibrs_mbpb(is_bit_set32(regs.ecx, 26));
-            cpu.info.features_ext.set_feat_pconfig(is_bit_set32(regs.ecx, 18));
-            cpu.info.features_ext.set_feat_avx512qfma(is_bit_set32(regs.ecx, 3));
-            cpu.info.features_ext.set_feat_avx512qvnniw(is_bit_set32(regs.ecx, 2));
+            cpu.info
+                .features_ext
+                .set_feat_avx512vl(u32bit::is_bit_set(regs.ebx, 31));
+            cpu.info
+                .features_ext
+                .set_feat_avx512bw(u32bit::is_bit_set(regs.ebx, 30));
+            cpu.info
+                .features_ext
+                .set_feat_sha(u32bit::is_bit_set(regs.ebx, 29));
+            cpu.info
+                .features_ext
+                .set_feat_avx512cd(u32bit::is_bit_set(regs.ebx, 28));
+            cpu.info
+                .features_ext
+                .set_feat_avx512er(u32bit::is_bit_set(regs.ebx, 27));
+            cpu.info
+                .features_ext
+                .set_feat_avx512pf(u32bit::is_bit_set(regs.ebx, 26));
+            cpu.info
+                .features_ext
+                .set_feat_processor_trace(u32bit::is_bit_set(regs.ebx, 25));
+            cpu.info
+                .features_ext
+                .set_feat_clwb(u32bit::is_bit_set(regs.ebx, 24));
+            cpu.info
+                .features_ext
+                .set_feat_clflushopt(u32bit::is_bit_set(regs.ebx, 23));
+            cpu.info
+                .features_ext
+                .set_feat_pcommit(u32bit::is_bit_set(regs.ebx, 22));
+            cpu.info
+                .features_ext
+                .set_feat_avx512ifma(u32bit::is_bit_set(regs.ebx, 21));
+            cpu.info
+                .features_ext
+                .set_feat_smap(u32bit::is_bit_set(regs.ebx, 20));
+            cpu.info
+                .features_ext
+                .set_feat_adx(u32bit::is_bit_set(regs.ebx, 19));
+            cpu.info
+                .features_ext
+                .set_feat_rdseed(u32bit::is_bit_set(regs.ebx, 18));
+            cpu.info
+                .features_ext
+                .set_feat_avx512dq(u32bit::is_bit_set(regs.ebx, 17));
+            cpu.info
+                .features_ext
+                .set_feat_avx512f(u32bit::is_bit_set(regs.ebx, 16));
+            cpu.info
+                .features_ext
+                .set_feat_pqe(u32bit::is_bit_set(regs.ebx, 15));
+            cpu.info
+                .features_ext
+                .set_feat_mpx(u32bit::is_bit_set(regs.ebx, 14));
+            cpu.info
+                .features_ext
+                .set_feat_fpcsds(u32bit::is_bit_set(regs.ebx, 13));
+            cpu.info
+                .features_ext
+                .set_feat_pqm(u32bit::is_bit_set(regs.ebx, 12));
+            cpu.info
+                .features_ext
+                .set_feat_rtm(u32bit::is_bit_set(regs.ebx, 11));
+            cpu.info
+                .features_ext
+                .set_feat_invpcid(u32bit::is_bit_set(regs.ebx, 10));
+            cpu.info
+                .features_ext
+                .set_feat_erms(u32bit::is_bit_set(regs.ebx, 9));
+            cpu.info
+                .features_ext
+                .set_feat_bmi2(u32bit::is_bit_set(regs.ebx, 8));
+            cpu.info
+                .features_ext
+                .set_feat_smep(u32bit::is_bit_set(regs.ebx, 7));
+            cpu.info
+                .features_ext
+                .set_feat_fpdp(u32bit::is_bit_set(regs.ebx, 6));
+            cpu.info
+                .features_ext
+                .set_feat_avx2(u32bit::is_bit_set(regs.ebx, 5));
+            cpu.info
+                .features_ext
+                .set_feat_hle(u32bit::is_bit_set(regs.ebx, 4));
+            cpu.info
+                .features_ext
+                .set_feat_bmi1(u32bit::is_bit_set(regs.ebx, 3));
+            cpu.info
+                .features_ext
+                .set_feat_sgx(u32bit::is_bit_set(regs.ebx, 2));
+            cpu.info
+                .features_ext
+                .set_feat_tsc_adjust(u32bit::is_bit_set(regs.ebx, 1));
+            cpu.info
+                .features_ext
+                .set_feat_fsgsbase(u32bit::is_bit_set(regs.ebx, 0));
+            cpu.info
+                .features_ext
+                .set_feat_sgx_lc(u32bit::is_bit_set(regs.ecx, 30));
+            cpu.info
+                .features_ext
+                .set_feat_rdpid(u32bit::is_bit_set(regs.ecx, 22));
+            cpu.info
+                .features_ext
+                .set_feat_va57(u32bit::is_bit_set(regs.ecx, 16));
+            cpu.info
+                .features_ext
+                .set_feat_avx512vp_dq(u32bit::is_bit_set(regs.ecx, 14));
+            cpu.info
+                .features_ext
+                .set_feat_tme(u32bit::is_bit_set(regs.ecx, 13));
+            cpu.info
+                .features_ext
+                .set_feat_avx512bitalg(u32bit::is_bit_set(regs.ecx, 12));
+            cpu.info
+                .features_ext
+                .set_feat_avx512vnni(u32bit::is_bit_set(regs.ecx, 11));
+            cpu.info
+                .features_ext
+                .set_feat_vpcl(u32bit::is_bit_set(regs.ecx, 10));
+            cpu.info
+                .features_ext
+                .set_feat_vaes(u32bit::is_bit_set(regs.ecx, 9));
+            cpu.info
+                .features_ext
+                .set_feat_gfni(u32bit::is_bit_set(regs.ecx, 8));
+            cpu.info
+                .features_ext
+                .set_feat_cet(u32bit::is_bit_set(regs.ecx, 7));
+            cpu.info
+                .features_ext
+                .set_feat_avx512vbmi2(u32bit::is_bit_set(regs.ecx, 6));
+            cpu.info
+                .features_ext
+                .set_feat_ospke(u32bit::is_bit_set(regs.ecx, 4));
+            cpu.info
+                .features_ext
+                .set_feat_pku(u32bit::is_bit_set(regs.ecx, 3));
+            cpu.info
+                .features_ext
+                .set_feat_umip(u32bit::is_bit_set(regs.ecx, 2));
+            cpu.info
+                .features_ext
+                .set_feat_avx512vbmi(u32bit::is_bit_set(regs.ecx, 1));
+            cpu.info
+                .features_ext
+                .set_feat_prefetchwt1(u32bit::is_bit_set(regs.ecx, 0));
+            cpu.info
+                .features_ext
+                .set_feat_arch_cap_msr(u32bit::is_bit_set(regs.ecx, 29));
+            cpu.info
+                .features_ext
+                .set_feat_stibp(u32bit::is_bit_set(regs.ecx, 27));
+            cpu.info
+                .features_ext
+                .set_feat_ibrs_mbpb(u32bit::is_bit_set(regs.ecx, 26));
+            cpu.info
+                .features_ext
+                .set_feat_pconfig(u32bit::is_bit_set(regs.ecx, 18));
+            cpu.info
+                .features_ext
+                .set_feat_avx512qfma(u32bit::is_bit_set(regs.ecx, 3));
+            cpu.info
+                .features_ext
+                .set_feat_avx512qvnniw(u32bit::is_bit_set(regs.ecx, 2));
         }
 
         cpu
-    }    
+    }
 }

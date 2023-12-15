@@ -20,7 +20,7 @@ pub fn x86_outport8(port: u16, value: u8) {
         asm!(
             "out dx, al",
             in("dx") port,
-            in("al") value, 
+            in("al") value,
             options(nostack, nomem),
         );
     }
@@ -35,7 +35,7 @@ pub fn x86_outport16(port: u16, value: u16) {
         asm!(
             "out dx, ax",
             in("dx") port,
-            in("ax") value, 
+            in("ax") value,
             options(nostack, nomem),
         );
     }
@@ -50,7 +50,7 @@ pub fn x86_outport32(port: u16, value: u32) {
         asm!(
             "out dx, eax",
             in("dx") port,
-            in("eax") value, 
+            in("eax") value,
             options(nostack, nomem),
         );
     }
@@ -116,10 +116,7 @@ pub fn x86_inport32(port: u16) -> u32 {
 #[inline(always)]
 pub fn x86_enable_interrupts() {
     unsafe {
-        asm!(
-            "cli",
-            options(nostack, nomem),
-        );
+        asm!("cli", options(nostack, nomem),);
     }
 }
 
@@ -129,10 +126,7 @@ pub fn x86_enable_interrupts() {
 #[inline(always)]
 pub fn x86_disable_interrupts() {
     unsafe {
-        asm!(
-            "sti",
-            options(nostack, nomem),
-        );
+        asm!("sti", options(nostack, nomem),);
     }
 }
 
@@ -141,9 +135,7 @@ pub fn x86_disable_interrupts() {
 //==========================================================
 #[inline(always)]
 pub fn x86_read_tsc() -> u64 {
-    unsafe {
-        _rdtsc() as u64
-    }
+    unsafe { _rdtsc() as u64 }
 }
 
 //==========================================================
@@ -154,7 +146,7 @@ pub fn x86_rdtscp() -> (u64, u32) {
     let eax: u32;
     let ecx: u32;
     let edx: u32;
-    
+
     unsafe {
         asm!(
         "rdtscp",
@@ -170,7 +162,7 @@ pub fn x86_rdtscp() -> (u64, u32) {
 }
 
 //==========================================================
-// UINTN x86_read_raw_cr3()
+// usize x86_read_raw_cr3()
 //==========================================================
 #[inline(always)]
 pub fn x86_read_raw_cr3() -> usize {
@@ -187,7 +179,7 @@ pub fn x86_read_raw_cr3() -> usize {
 }
 
 //==========================================================
-// UINTN x86_write_cr3 (UINTN new_cr3)
+// usize x86_write_cr3 (usize new_cr3)
 //==========================================================
 #[inline(always)]
 pub fn x86_write_cr3(cr3: usize) -> usize {
@@ -407,7 +399,7 @@ pub fn x86_invalidate_page(mem_addr: usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_or(UINTN *value, UINTN mask)
+// VOID x86_atomic_or(usize *value, usize mask)
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_or(value: &mut usize, mask: usize) {
@@ -431,7 +423,7 @@ pub fn x86_atomic_or(value: &mut usize, mask: usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_and(UINTN *value, UINTN mask);
+// VOID x86_atomic_and(usize *value, usize mask);
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_and(value: &mut usize, mask: usize) {
@@ -451,12 +443,11 @@ pub fn x86_atomic_and(value: &mut usize, mask: usize) {
                 options(nostack),
             );
         }
-
     }
 }
 
 //==========================================================
-// VOID x86_atomic_xor(UINTN *value, UINTN mask);
+// VOID x86_atomic_xor(usize *value, usize mask);
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_xor(value: &mut usize, mask: usize) {
@@ -480,7 +471,7 @@ pub fn x86_atomic_xor(value: &mut usize, mask: usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_add(UINTN *value, UINTN addend);
+// VOID x86_atomic_add(usize *value, usize addend);
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_add(value: &mut usize, addend: usize) {
@@ -504,7 +495,7 @@ pub fn x86_atomic_add(value: &mut usize, addend: usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_sub(UINTN *value, UINTN subtrahend);
+// VOID x86_atomic_sub(usize *value, usize subtrahend);
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_sub(value: &mut usize, subtrahend: usize) {
@@ -528,7 +519,7 @@ pub fn x86_atomic_sub(value: &mut usize, subtrahend: usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_inc(UINTN *value)
+// VOID x86_atomic_inc(usize *value)
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_inc(value: &mut usize) {
@@ -550,7 +541,7 @@ pub fn x86_atomic_inc(value: &mut usize) {
 }
 
 //==========================================================
-// VOID x86_atomic_dec(UINTN *value)
+// VOID x86_atomic_dec(usize *value)
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_dec(value: &mut usize) {
@@ -572,7 +563,7 @@ pub fn x86_atomic_dec(value: &mut usize) {
 }
 
 //==========================================================
-// UINT8 x86_atomic_dec_and_test_zero(UINTN *value)
+// UINT8 x86_atomic_dec_and_test_zero(usize *value)
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_dec_and_test_zero(value: &mut usize) -> bool {
@@ -602,14 +593,13 @@ pub fn x86_atomic_dec_and_test_zero(value: &mut usize) -> bool {
 
     if result > 0 {
         true
-    }
-    else {
+    } else {
         false
     }
 }
 
 //==========================================================
-// VOID x86_atomic_mov(UINTN *dest, UINTN value)
+// VOID x86_atomic_mov(usize *dest, usize value)
 //==========================================================
 #[inline(always)]
 pub fn x86_atomic_mov(dest: &mut usize, value: usize) {
@@ -633,7 +623,7 @@ pub fn x86_atomic_mov(dest: &mut usize, value: usize) {
 }
 
 //==========================================================
-// VOID x86_spinlock_acquire(UINTN *spinlock)
+// VOID x86_spinlock_acquire(usize *spinlock)
 //==========================================================
 #[inline(always)]
 pub fn x86_spinlock_acquire(spinlock: &mut usize) {
@@ -675,7 +665,7 @@ pub fn x86_spinlock_acquire(spinlock: &mut usize) {
 }
 
 //==========================================================
-// VOID x86_spinlock_release(UINTN *spinlock)
+// VOID x86_spinlock_release(usize *spinlock)
 //==========================================================
 #[inline(always)]
 pub fn x86_spinlock_release(spinlock: &mut usize) {
@@ -711,7 +701,12 @@ pub struct CpuidRegs {
 }
 impl CpuidRegs {
     pub fn new() -> CpuidRegs {
-        CpuidRegs { eax: 0, ebx: 0, ecx: 0, edx: 0 }
+        CpuidRegs {
+            eax: 0,
+            ebx: 0,
+            ecx: 0,
+            edx: 0,
+        }
     }
 }
 
@@ -720,7 +715,6 @@ impl CpuidRegs {
 #[inline(always)]
 pub fn x86_cpuid(mode: u32) -> CpuidRegs {
     let mut regs = CpuidRegs::new();
-
 
     unsafe {
         asm!(
@@ -762,16 +756,21 @@ pub fn x86_cpuid(mode: u32) -> CpuidRegs {
             lateout("edx") regs.edx,
             options(nomem),
         );
-    }    
+    }
     regs
 }
 
-// Executes the cpuid instruction, passing mode in eax, and 
+// Executes the cpuid instruction, passing mode in eax, and
 // an additional value in ecx for extended instructions
 #[cfg(target_arch = "x86")]
 #[inline(always)]
 pub fn x86_cpuid_ext(mode: u32, param: u32) -> CpuidRegs {
-    let mut regs = CpuidRegs { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    let mut regs = CpuidRegs {
+        eax: 0,
+        ebx: 0,
+        ecx: 0,
+        edx: 0,
+    };
 
     unsafe {
         asm!(
@@ -799,7 +798,12 @@ pub fn x86_cpuid_ext(mode: u32, param: u32) -> CpuidRegs {
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn x86_cpuid_ext(mode: u32, param: u32) -> CpuidRegs {
-    let mut regs = CpuidRegs { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    let mut regs = CpuidRegs {
+        eax: 0,
+        ebx: 0,
+        ecx: 0,
+        edx: 0,
+    };
 
     unsafe {
         asm!(
@@ -848,7 +852,7 @@ pub fn x86_lfence() {
 }
 
 //==========================================================
-// VOID x86_popcount(UINTN value)
+// VOID x86_popcount(usize value)
 //==========================================================
 #[inline(always)]
 pub fn x86_popcount(value: usize) -> usize {
@@ -865,11 +869,11 @@ pub fn x86_popcount(value: usize) -> usize {
 
 //==========================================================
 // Bit Scan Forward
-// UINTN x86_bsf(UINTN value)
+// usize x86_bsf(usize value)
 // taken from https://docs.oracle.com/cd/E19455-01/806-3773/instructionset-89/index.html
- //==========================================================
- #[inline(always)]
- pub fn x86_bsf(input: usize) -> usize {
+//==========================================================
+#[inline(always)]
+pub fn x86_bsf(input: usize) -> usize {
     debug_assert!(input > 0);
     let mut pos: usize;
     unsafe {
@@ -886,7 +890,7 @@ pub fn x86_popcount(value: usize) -> usize {
 
 //==========================================================
 // Bit Scan Reverse
-// UINTN x86_bsr(UINTN value)
+// usize x86_bsr(usize value)
 // taken from https://docs.oracle.com/cd/E19620-01/805-4693/instructionset-90/index.html
 //==========================================================
 #[inline(always)]

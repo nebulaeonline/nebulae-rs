@@ -1,7 +1,7 @@
 use core::arch::asm;
 
 //==========================================================
-// UINT32 aarch_popcount(UINTN value)
+// UINT32 aarch_popcount(usize value)
 //==========================================================
 #[inline(always)]
 pub fn aarch_popcount(value: usize) -> usize {
