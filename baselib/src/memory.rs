@@ -224,7 +224,6 @@ impl const From<u32> for PhysAddr {
     }
 }
 
-#[cfg(target_pointer_width = "64")]
 impl const From<u64> for PhysAddr {
     fn from(item: u64) -> Self {
         Self(item as usize)
@@ -333,6 +332,13 @@ impl const MemAddr for VirtAddr {
 
 impl const Align for VirtAddr {}
 
+#[cfg(target_pointer_width = "32")]
+impl const From<u32> for VirtAddr {
+    fn from(item: u32) -> Self {
+        Self(item as usize)
+    }
+}
+
 impl const From<u64> for VirtAddr {
     fn from(item: u64) -> Self {
         Self(item as usize)
@@ -371,32 +377,36 @@ pub trait PageDir {
         &mut self,
         paddr: PhysAddr,
         vaddr: VirtAddr,
+        owner: Owner,
         page_size: PageSize,
         flags: usize,
     ) -> Option<VirtAddr>;
-    fn unmap_page(&mut self, vaddr: VirtAddr, page_size: PageSize);
-    fn dealloc_page(&mut self, vaddr: VirtAddr, page_size: PageSize);
-    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, page_size: PageSize);
-    fn identity_map_page(&mut self, paddr: PhysAddr, page_size: PageSize, flags: usize);
-    fn alloc_page(
+    fn unmap_page(&mut self, vaddr: VirtAddr, owner: Owner, page_size: PageSize);
+    fn dealloc_page(&mut self, vaddr: VirtAddr, owner: Owner, page_size: PageSize);
+    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, owner: Owner, page_size: PageSize);
+    fn identity_map_page(&mut self, paddr: PhysAddr, owner: Owner, page_size: PageSize, flags: usize);
+    fn alloc_page_fixed(
         &mut self,
         v: VirtAddr,
+        owner: Owner,
         size: PageSize,
         flags: usize,
         bit_pattern: BitPattern,
     ) -> VirtAddr;
-    fn alloc_pages(
+    fn alloc_pages_fixed(
         &mut self,
         size_in_pages: usize,
         v: VirtAddr,
+        owner: Owner,
         page_size: PageSize,
         flags: usize,
         bit_pattern: BitPattern,
     ) -> Option<VirtAddr>;
-    fn alloc_pages_contiguous(
+    fn alloc_pages_contiguous_fixed(
         &mut self,
         size_in_pages: usize,
         v: VirtAddr,
+        owner: Owner,
         page_size: PageSize,
         flags: usize,
         bit_pattern: BitPattern,
@@ -517,30 +527,6 @@ pub enum Owner {
     Verboten = usize::MAX,
 }
 
-// functions for constructing bitmap-like structures
-pub mod bitindex {
-    use crate::common::base::*;
-
-    pub struct BitIndex {}
-    impl BitIndex {
-        pub fn calc_bitindex_size_in_usize(capacity: usize) -> usize {
-            (capacity + (usize::BITS as usize - 1)) / usize::BITS as usize
-        }
-
-        pub fn calc_bitindex_size_in_bytes(capacity: usize) -> usize {
-            BitIndex::calc_bitindex_size_in_usize(capacity) * MACHINE_UBYTES
-        }
-
-        pub fn calc_bitindex_size_in_default_pages(capacity: usize) -> usize {
-            (BitIndex::calc_bitindex_size_in_bytes(capacity) + MEMORY_DEFAULT_PAGE_USIZE - 1) / MEMORY_DEFAULT_PAGE_USIZE
-        }
-
-        pub fn calc_wasted_bytes_in_default_pages(capacity: usize) -> usize {
-            BitIndex::calc_bitindex_size_in_default_pages(capacity) * MEMORY_DEFAULT_PAGE_USIZE - BitIndex::calc_bitindex_size_in_bytes(capacity)        
-        }
-    }
-}
-
 // the genesis
 // These are the naughty functions that need to be
 // used during scaffolding from the inside, but that
@@ -563,7 +549,8 @@ pub mod raw {
     pub fn memset_range_inclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
         let region_size = end_addr.as_usize() - start_addr.as_usize() + 1;
         unsafe {
-            let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
+            let base =
+                core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
 
             for i in 0..region_size {
                 base[i] = value;
@@ -574,7 +561,8 @@ pub mod raw {
     pub fn memset_range_exclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
         let region_size = end_addr.as_usize() - start_addr.as_usize();
         unsafe {
-            let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
+            let base =
+                core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
 
             for i in 0..region_size {
                 base[i] = value;
@@ -601,8 +589,10 @@ pub mod raw {
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
 
         unsafe {
-            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
-            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
+            let src =
+                core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
+            let dest =
+                core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
 
             for i in 0..size_in_bytes {
                 dest[i] = src[i];
@@ -630,8 +620,10 @@ pub mod raw {
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
 
         unsafe {
-            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
-            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
+            let src =
+                core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
+            let dest =
+                core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
 
             for i in 0..size_in_bytes {
                 dest[i] = src[i];
@@ -733,17 +725,17 @@ pub mod pages {
         page_count * MEMORY_DEFAULT_PAGE_USIZE
     }
 
-    // calculates the number of default pages given the number of bytes
-    // returns true if the number of bytes is evenly divisible by the default page size
+    // calculates the number of pages given the number of bytes and the page size
+    // returns true if the number of bytes is evenly divisible by the specified page size
     // returns false otherwise
     #[inline(always)]
-    pub const fn bytes_to_pages_is_page_sized(bytes: usize, page_size: PageSize) -> (usize, bool) {
+    pub const fn bytes_to_pages(bytes: usize, page_size: PageSize) -> (usize, bool) {
         let page_count = (bytes + page_size.into_bits() - 1) / page_size.into_bits();
         let remainder = bytes % MEMORY_DEFAULT_PAGE_USIZE;
 
         (page_count, remainder == 0)
     }
-    
+
     pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
         (size + page_size.into_bits() - 1) / page_size.into_bits()
     }

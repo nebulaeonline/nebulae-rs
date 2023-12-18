@@ -1,15 +1,15 @@
 pub mod tree {
-    
+
     pub mod red_black {
-        
+
         use crate::common::base::*;
 
         const COLOR_RED: bool = true;
         const COLOR_BLACK: bool = false;
-            
+
         pub trait RBNode {
             fn new() -> Self;
-            
+
             fn key(&self) -> u128;
             fn value(&self) -> usize;
             fn left(&self) -> *mut Self;
@@ -33,11 +33,14 @@ pub mod tree {
             root: *mut T,
         }
 
-        impl<T> RBTree<T> where T: RBNode {
+        impl<T> RBTree<T>
+        where
+            T: RBNode,
+        {
             pub fn root(&self) -> *mut T {
                 self.root
             }
-            
+
             pub fn set_root(&self, root: *mut T) {
                 self.root = root;
             }
@@ -51,25 +54,23 @@ pub mod tree {
             pub fn size(&self) -> u128 {
                 self.size_node(self.root())
             }
-        
+
             pub fn size_node(&self, node: *mut T) -> u128 {
                 if node == core::ptr::null_mut() {
                     return 0;
                 }
-                unsafe {
-                    (*node).n()
-                }
+                unsafe { (*node).n() }
             }
-        
+
             pub fn min(&self) -> u128 {
-                unsafe { 
+                unsafe {
                     match self.min_node(self.root()).as_ref() {
                         Some(node) => (*node).key(),
                         None => 0,
                     }
                 }
             }
-        
+
             pub fn min_node(&self, node: *mut T) -> *mut T {
                 if node == core::ptr::null_mut() {
                     return core::ptr::null_mut();
@@ -81,7 +82,7 @@ pub mod tree {
                     self.min_node((*node).left())
                 }
             }
-        
+
             pub fn max(&self) -> u128 {
                 unsafe {
                     match self.max_node(self.root()).as_ref() {
@@ -108,9 +109,7 @@ pub mod tree {
                 if node == core::ptr::null_mut() {
                     return None;
                 }
-                unsafe {
-                    Some((*node).key())
-                }
+                unsafe { Some((*node).key()) }
             }
 
             pub fn ceiling_node(&self, key: u128) -> Option<*mut T> {
@@ -118,9 +117,7 @@ pub mod tree {
                 if node == core::ptr::null_mut() {
                     return None;
                 }
-                unsafe {
-                    Some(node)
-                }
+                unsafe { Some(node) }
             }
 
             fn _ceiling_node(&self, node: *mut T, key: u128) -> *mut T {
@@ -147,11 +144,9 @@ pub mod tree {
                 if node == core::ptr::null_mut() {
                     return None;
                 }
-                unsafe {
-                    Some((*node).key())
-                }
+                unsafe { Some((*node).key()) }
             }
-        
+
             pub fn floor_node(&self, node: *mut T, key: u128) -> *mut T {
                 if node == core::ptr::null_mut() {
                     return core::ptr::null_mut();
@@ -170,17 +165,15 @@ pub mod tree {
                     return node;
                 }
             }
-        
+
             pub fn select(&self, k: u128) -> Option<u128> {
                 let node = self.select_node(self.root(), k);
                 if node == core::ptr::null_mut() {
                     return None;
                 }
-                unsafe {
-                    Some((*node).key())
-                }
+                unsafe { Some((*node).key()) }
             }
-        
+
             pub fn select_node(&self, node: *mut T, k: u128) -> *mut T {
                 if node == core::ptr::null_mut() {
                     return core::ptr::null_mut();
@@ -196,11 +189,11 @@ pub mod tree {
                     }
                 }
             }
-        
+
             pub fn rank(&self, key: u128) -> u128 {
                 self.rank_node(self.root(), key)
             }
-        
+
             pub fn rank_node(&self, node: *mut T, key: u128) -> u128 {
                 if node == core::ptr::null_mut() {
                     return 0;
@@ -209,20 +202,22 @@ pub mod tree {
                     if key < (*node).key() {
                         return self.rank_node((*node).left(), key);
                     } else if key > (*node).key() {
-                        return 1 + self.size_node((*node).left()) + self.rank_node((*node).right(), key);
+                        return 1
+                            + self.size_node((*node).left())
+                            + self.rank_node((*node).right(), key);
                     } else {
                         return self.size_node((*node).left());
                     }
                 }
             }
-        
+
             pub fn put(&self, node: *mut T) {
                 self.set_root(self.put_node(self.root(), node));
                 unsafe {
                     (*self.root()).set_color(COLOR_BLACK);
                 }
             }
-        
+
             fn put_node(&self, mut node: *mut T, new_node: *mut T) -> *mut T {
                 if node == core::ptr::null_mut() {
                     return new_node;
@@ -244,20 +239,20 @@ pub mod tree {
                     if self.is_red((*node).left()) && self.is_red((*node).right()) {
                         self.flip_colors(node);
                     }
-                    (*node).set_n(1 + self.size_node((*node).left()) + self.size_node((*node).right()));
+                    (*node).set_n(
+                        1 + self.size_node((*node).left()) + self.size_node((*node).right()),
+                    );
                     return node;
                 }
             }
-        
+
             fn is_red(&self, node: *mut T) -> bool {
                 if node == core::ptr::null_mut() {
                     return false;
                 }
-                unsafe {
-                    (*node).color() == COLOR_RED
-                }
+                unsafe { (*node).color() == COLOR_RED }
             }
-        
+
             fn rotate_left(&self, node: *mut T) -> *mut T {
                 unsafe {
                     let x = (*node).right();
@@ -266,11 +261,13 @@ pub mod tree {
                     (*x).set_color((*node).color());
                     (*node).set_color(COLOR_RED);
                     (*x).set_n((*node).n());
-                    (*node).set_n(1 + self.size_node((*node).left()) + self.size_node((*node).right()));
+                    (*node).set_n(
+                        1 + self.size_node((*node).left()) + self.size_node((*node).right()),
+                    );
                     return x;
                 }
             }
-        
+
             fn rotate_right(&self, node: *mut T) -> *mut T {
                 unsafe {
                     let x = (*node).left();
@@ -279,11 +276,13 @@ pub mod tree {
                     (*x).set_color((*node).color());
                     (*node).set_color(COLOR_RED);
                     (*x).set_n((*node).n());
-                    (*node).set_n(1 + self.size_node((*node).left()) + self.size_node((*node).right()));
+                    (*node).set_n(
+                        1 + self.size_node((*node).left()) + self.size_node((*node).right()),
+                    );
                     return x;
                 }
             }
-        
+
             fn flip_colors(&self, node: *mut T) {
                 unsafe {
                     (*node).set_color(COLOR_RED);
@@ -297,9 +296,7 @@ pub mod tree {
                 if node == core::ptr::null_mut() {
                     return None;
                 }
-                unsafe {
-                    Some((*node).value())
-                }
+                unsafe { Some((*node).value()) }
             }
 
             pub fn get_node(&self, node: *mut T, key: u128) -> *mut T {
@@ -340,8 +337,10 @@ pub mod tree {
                 }
             }
 
-            pub  fn delete_max(&self) {
-                if unsafe { !self.is_red((*self.root()).left()) && !self.is_red((*self.root()).right()) } {
+            pub fn delete_max(&self) {
+                if unsafe {
+                    !self.is_red((*self.root()).left()) && !self.is_red((*self.root()).right())
+                } {
                     unsafe {
                         (*self.root()).set_color(COLOR_RED);
                     }
@@ -369,7 +368,9 @@ pub mod tree {
             }
 
             pub fn delete(&self, key: u128) {
-                if unsafe { !self.is_red((*self.root()).left()) && !self.is_red((*self.root()).right()) } {
+                if unsafe {
+                    !self.is_red((*self.root()).left()) && !self.is_red((*self.root()).right())
+                } {
                     unsafe {
                         (*self.root()).set_color(COLOR_RED);
                     }
@@ -394,7 +395,8 @@ pub mod tree {
                         if key == (*node).key() && (*node).right() == core::ptr::null_mut() {
                             return core::ptr::null_mut();
                         }
-                        if !self.is_red((*node).right()) && !self.is_red((*(*node).right()).left()) {
+                        if !self.is_red((*node).right()) && !self.is_red((*(*node).right()).left())
+                        {
                             node = self.move_red_right(node);
                         }
                         if key == (*node).key() {
@@ -444,7 +446,9 @@ pub mod tree {
                     if self.is_red((*node).left()) && self.is_red((*node).right()) {
                         self.flip_colors(node);
                     }
-                    (*node).set_n(1 + self.size_node((*node).left()) + self.size_node((*node).right()));
+                    (*node).set_n(
+                        1 + self.size_node((*node).left()) + self.size_node((*node).right()),
+                    );
                 }
                 return node;
             }
@@ -498,7 +502,11 @@ pub mod tree {
                     if (*node).color() == COLOR_RED {
                         serial_println!("{} {}", (*node).key(), (*node).value() as usize);
                     } else {
-                        serial_println!("\x1b[1;30m{} {}\x1b[0m", (*node).key(), (*node).value() as usize);
+                        serial_println!(
+                            "\x1b[1;30m{} {}\x1b[0m",
+                            (*node).key(),
+                            (*node).value() as usize
+                        );
                     }
                     self.print_tree_color_node((*node).left(), indent + 1);
                 }
@@ -536,9 +544,19 @@ pub mod tree {
                         serial_print!("  ");
                     }
                     if (*node).color() == COLOR_RED {
-                        serial_println!("{} {} {}", (*node).key(), (*node).value() as usize, (*node).n());
+                        serial_println!(
+                            "{} {} {}",
+                            (*node).key(),
+                            (*node).value() as usize,
+                            (*node).n()
+                        );
                     } else {
-                        serial_println!("\x1b[1;30m{} {} {}\x1b[0m", (*node).key(), (*node).value() as usize, (*node).n());
+                        serial_println!(
+                            "\x1b[1;30m{} {} {}\x1b[0m",
+                            (*node).key(),
+                            (*node).value() as usize,
+                            (*node).n()
+                        );
                     }
                     self.print_tree_size_color_node((*node).left(), indent + 1);
                 }

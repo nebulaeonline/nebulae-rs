@@ -121,6 +121,35 @@ pub mod bit {
     bit_ops!(u32, u32bit);
     bit_ops!(u64, u64bit);
     bit_ops!(usize, ubit);
+
+    // functions for constructing bitmap-like structures
+    pub mod bitindex {
+        use crate::common::base::*;
+
+        pub fn calc_bitindex_size_in_usize(capacity: usize) -> usize {
+            (capacity + (usize::BITS as usize - 1)) / usize::BITS as usize
+        }
+
+        pub fn calc_bitindex_size_in_bytes(capacity: usize) -> usize {
+            calc_bitindex_size_in_usize(capacity) * MACHINE_UBYTES
+        }
+
+        pub fn calc_bitindex_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
+            (calc_bitindex_size_in_bytes(capacity) + page_size.into_bits() - 1)
+                / page_size.into_bits()
+        }
+
+        pub fn calc_wasted_bytes_in_pages(capacity: usize, page_size: PageSize) -> usize {
+            calc_bitindex_size_in_pages(capacity, page_size) * page_size.into_bits()
+                - calc_bitindex_size_in_bytes(capacity)
+        }
+
+        pub fn calc_bitindex(capacity: usize, index: usize) -> (usize, usize) {
+            let index_usize = index / MACHINE_UBITS;
+            let index_bit = index % MACHINE_UBITS;
+            (index_usize, index_bit)
+        }
+    }
 }
 
 pub mod factor {
@@ -197,8 +226,8 @@ pub mod base {
     #[allow(unused_imports)] // not sure why this is necessary
     pub use super::debug_assert::*;
     pub use super::factor::*;
-    pub use super::platform_memory::*;
     pub use super::platform_constants::*;
+    pub use super::platform_memory::*;
     pub use super::priority::*;
     pub use crate::memory::*;
 
@@ -383,7 +412,7 @@ pub mod base {
     pub const PAGE_TABLE_MAX_ENTRIES: usize = MEMORY_DEFAULT_PAGE_USIZE / PAGE_TABLE_ENTRY_SIZE;
 
     pub const FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC: usize = 100;
-    
+
     pub fn iron() -> &'static mut GenesisBlock {
         let (gb, _, _) = locate_genesis_block();
         gb
@@ -467,14 +496,14 @@ pub mod platform_constants {
 }
 
 #[cfg(target_arch = "x86")]
-pub mod memory {
+pub mod platform_memory {
     use super::base::*;
 
     pub const ALIGN_MASK_4K: usize = 0xFFFF_F000;
     pub const ALIGN_MASK_4M: usize = 0xFFC0_0000;
 
     pub const PAGING_PRESENT: usize = ubit::bit(0);
-    pub const PAGING_WRITABLE: usize = ubit::bit(1);
+    pub const PAGING_WRITEABLE: usize = ubit::bit(1);
     pub const PAGING_USERMODE: usize = ubit::bit(2);
     pub const PAGING_WRITETHROUGH: usize = ubit::bit(3);
     pub const PAGING_CACHE_DISABLE: usize = ubit::bit(4);
@@ -531,7 +560,7 @@ pub mod platform_memory {
 }
 
 #[cfg(target_arch = "aarch64")]
-pub mod memory {
+pub mod platform_memory {
 
     use super::base::*;
 
@@ -551,7 +580,7 @@ pub mod memory {
 
     // placeholders from x64
     pub const PAGING_PRESENT: usize = ubit::bit(0);
-    pub const PAGING_WRITABLE: usize = ubit::bit(1);
+    pub const PAGING_WRITEABLE: usize = ubit::bit(1);
     pub const PAGING_USERMODE: usize = ubit::bit(2);
     pub const PAGING_WRITETHROUGH: usize = ubit::bit(3);
     pub const PAGING_CACHE_DISABLE: usize = ubit::bit(4);
@@ -562,30 +591,10 @@ pub mod memory {
     pub const PAGING_GLOBAL: usize = ubit::bit(8);
 
     pub const KERNEL_HEAP_SIZE: usize = USIZE_32M;
-    pub const MEMORY_MAX_WASTE: usuze = USIZE_32K;
+    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
 }
 
 // STATICS
-pub mod kernel_statics {
-    use uefi::prelude::*;
-    use uefi::table::boot::*;
-
-    use crate::frame_alloc::*;
-    use crate::memory::*;
-
-    // ALWAYS LOCK HIGH TO LOW WHEN TAKING MULTIPLE LOCKS;
-    // prefer to take locks as part of a single statement so they don't stick around
-    pub static mut UEFI_SYSTEM_TABLE_0: spin::Mutex<Option<SystemTable<Boot>>> =
-        spin::Mutex::new(None);
-    pub static mut UEFI_MEMORY_MAP_1: spin::Mutex<Option<MemoryMap>> = spin::Mutex::new(None);
-    pub static mut PHYS_MEM_MAX_2: spin::Mutex<Option<PhysAddr>> = spin::Mutex::new(None);
-    pub static mut PHYS_MEM_MAX_USIZE_IDX_2: spin::Mutex<Option<usize>> = spin::Mutex::new(None);
-    pub static mut FRAME_ALLOCATOR_3: spin::Mutex<Option<TreeAllocator>> = spin::Mutex::new(None);
-    pub static mut KERNEL_BASE_VAS_4: spin::Mutex<Option<Vas>> = spin::Mutex::new(None);
-    //pub static mut KERNEL_BUMP_ALLOC_5: spin::Mutex<Option<BumpAllocator>> = spin::Mutex::new(None);
-    pub static mut USING_FRAME_ALLOCATOR_6: spin::Mutex<bool> = spin::Mutex::new(false);
-}
-
 pub mod as_usize {
     pub trait AsUsize {
         fn as_usize(&self) -> usize;

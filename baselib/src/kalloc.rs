@@ -1,6 +1,6 @@
 use crate::bitmap::*;
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
+use crate::kernel_statics::*;
 
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;
@@ -36,12 +36,12 @@ pub struct MemoryPool {
 impl MemoryPool {
     #[inline(always)]
     pub fn calc_bitmap_size_in_pages(capacity: usize) -> usize {
-        Bitmap::calc_size_in_pages(capacity, PageSize::Small)
+        bitindex::calc_bitindex_size_in_pages(capacity, PageSize::Small)
     }
 
     #[inline(always)]
     pub fn calc_bitmap_size_in_usize(capacity: usize) -> usize {
-        Bitmap::calc_size_in_usize(capacity)
+        bitindex::calc_bitindex_size_in_usize(capacity)
     }
 
     #[inline(always)]
@@ -68,7 +68,7 @@ impl MemoryPool {
             block_size: block_size,
             capacity: capacity,
             start: start,
-            bitmap: Bitmap::new(),
+            bitmap: Bitmap::new(Owner::Memory),
             bitmap_vaddr: bitmap_start,
         }
     }
@@ -83,9 +83,10 @@ impl MemoryPool {
                 .base_page_table
                 .as_mut()
                 .unwrap()
-                .alloc_pages_contiguous(
+                .alloc_pages_contiguous_fixed(
                     pages::calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
                     self.start,
+                    Owner::System,
                     PageSize::Small,
                     PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     BitPattern::ZeroZero,
@@ -94,7 +95,7 @@ impl MemoryPool {
 
         if contiguous.is_some() {
             self.bitmap
-                .init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
+                .init_virt_vmem_fixed(self.capacity, self.bitmap_vaddr);
             self.bitmap.set_all();
             return contiguous;
         } else {
@@ -106,9 +107,10 @@ impl MemoryPool {
                     .base_page_table
                     .as_mut()
                     .unwrap()
-                    .alloc_pages(
+                    .alloc_pages_fixed(
                         self.capacity * self.block_size,
                         self.start,
+                        Owner::System,
                         PageSize::Small,
                         PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                         BitPattern::ZeroZero,
@@ -117,7 +119,7 @@ impl MemoryPool {
 
             if nc.is_some() {
                 self.bitmap
-                    .init(self.capacity, self.bitmap_vaddr, VirtAddr(0));
+                    .init_virt_vmem_fixed(self.capacity, self.bitmap_vaddr);
                 self.bitmap.set_all();
                 return nc;
             } else {
@@ -151,6 +153,7 @@ impl Drop for MemoryPool {
                 .dealloc_pages_contiguous(
                     self.start,
                     self.capacity * self.block_size,
+                    Owner::System,
                     PageSize::Small,
                 )
         };

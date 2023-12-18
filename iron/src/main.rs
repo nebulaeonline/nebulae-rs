@@ -9,10 +9,10 @@ use core::fmt::Write;
 use uefi::prelude::*;
 
 use baselib::common::base::*;
-use baselib::common::kernel_statics::*;
-use baselib::common::naughty::*;
 use baselib::cpu::*;
 use baselib::frame_alloc::TreeAllocator;
+use baselib::genesis::*;
+use baselib::kernel_statics::*;
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 use baselib::interrupts::*;
@@ -39,11 +39,16 @@ fn uefi_start(_image_handler: uefi::Handle, mut system_table: SystemTable<Boot>)
             .as_ref()
             .unwrap()
             .boot_services()
-            .set_watchdog_timer(0, 65536, None);
+            .set_watchdog_timer(0, NEBULAE as u16, None);
 
-        // say our hello; this will be our last display output until driver / framebuffer
+        // say our hello; this will be our last display output until display driver / framebuffer
         _ = writeln!((*st).as_mut().unwrap().stdout(), "Hello :)");
     }
+
+    #[cfg(debug_assertions)]
+    serial_println!("beginning memory system init");
+
+    init_genesis_block();
 
     #[cfg(debug_assertions)]
     serial_println!("beginning physical frame allocator init");
@@ -73,7 +78,7 @@ fn kernel_main() -> () {
     exceptions_init();
 
     // get some info on our bsp
-    
+
     // see how many free pages we have after bootstrapping the memory manager
     {
         // USING_FRAME_ALLOCATOR_6 is not required here because this is a non-mutable reference executed
@@ -102,7 +107,7 @@ fn kernel_main() -> () {
 
         _ = (*kernel_vas).as_mut().unwrap().init_cr3();
         (*kernel_vas).as_mut().unwrap().switch_to();
-        
+
         #[cfg(debug_assertions)]
         serial_println!("Kernel VAS initialized");
     }

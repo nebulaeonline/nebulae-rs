@@ -1,7 +1,7 @@
 use uefi::table::boot::MemoryType;
 
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
+use crate::kernel_statics::*;
 
 use core::ptr;
 
