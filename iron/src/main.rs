@@ -12,7 +12,7 @@ use baselib::common::base::*;
 use baselib::common::kernel_statics::*;
 use baselib::common::naughty::*;
 use baselib::cpu::*;
-use baselib::framemgr::TreeAllocator;
+use baselib::frame_alloc::TreeAllocator;
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 use baselib::interrupts::*;

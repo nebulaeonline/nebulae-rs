@@ -5,8 +5,8 @@
 #![feature(iter_advance_by)]
 #![feature(const_trait_impl)]
 #![feature(abi_x86_interrupt)]
-
-// #![allow(incomplete_features)]
+//#![allow(incomplete_features)]
+#![feature(type_alias_impl_trait)]
 // #![feature(generic_const_exprs)]
 
 // baselib mods
@@ -15,8 +15,7 @@ pub mod structures;
 pub mod bitmap;
 pub mod common;
 pub mod cpu;
-//pub mod fb_bitmap;
-pub mod framemgr;
+pub mod frame_alloc;
 pub mod interrupts;
 pub mod kalloc;
 pub mod memory;

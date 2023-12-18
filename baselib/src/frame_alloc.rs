@@ -1,22 +1,114 @@
 use core::cell::Cell;
 
-use uefi::table::boot::*;
+//use uefi::table::boot::*;
 
 use crate::bitmap::*;
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
-use crate::structures::tree::*;
+//use crate::common::kernel_statics::*;
+use crate::structures::tree::red_black::*;
+
+#[repr(C)]
+pub struct MemNode {
+    key: Cell<u128>,
+    value: Cell<usize>,
+    ptr: Cell<*mut MemRegionDescr>,
+    left: Cell<*mut MemNode>,
+    right: Cell<*mut MemNode>,
+    color: Cell<bool>,
+    n: Cell<u128>,
+    idx: Cell<usize>,
+}
+
+impl RBNode for MemNode {
+    fn new() -> Self {
+        MemNode {
+            key: Cell::new(ZERO_U128),
+            value: Cell::new(ZERO_USIZE),
+            ptr: Cell::new(core::ptr::null_mut()),
+            left: Cell::new(core::ptr::null_mut()),
+            right: Cell::new(core::ptr::null_mut()),
+            color: Cell::new(false),
+            n: Cell::new(ZERO_U128),
+            idx: Cell::new(ZERO_USIZE),
+        }
+    }
+
+    fn key(&self) -> u128 {
+        self.key.get()
+    }
+
+    fn set_key(&self, key: u128) {
+        self.key.set(key);
+    }
+
+    fn value(&self) -> usize {
+        self.value.get()
+    }
+
+    fn set_value(&self, value: usize) {
+        self.value.set(value);
+    }
+
+    fn ptr(&self) -> *mut () {
+        self.ptr.get() as *mut ()
+    }
+
+    fn set_ptr(&self, ptr: *mut ()) {
+        self.ptr.set(ptr as *mut MemRegionDescr);
+    }
+
+    fn left(&self) -> *mut Self {
+        self.left.get()
+    }
+    
+    fn set_left(&self, left: *mut Self) {
+        self.left.set(left);
+    }
+
+        fn right(&self) -> *mut Self {
+        self.right.get()
+    }
+
+    #[allow(refining_impl_trait)]
+    fn set_right(&self, right: *mut Self) {
+        self.right.set(right);
+    }
+
+    fn color(&self) -> bool {
+        self.color.get()
+    }
+
+    fn set_color(&self, color: bool) {
+        self.color.set(color);
+    }
+
+    fn n(&self) -> u128 {
+        self.n.get()
+    }
+
+    fn set_n(&self, n: u128) {
+        self.n.set(n);
+    }
+
+    fn idx(&self) -> usize {
+        self.idx.get()
+    }
+
+    fn set_idx(&self, idx: usize) {
+        self.idx.set(idx);
+    }
+}
 
 #[repr(C)]
 pub struct MemRegionDescr {
-    pub start_addr: Cell<usize>,             // Starting address of the memory frame
-    pub size: Cell<usize>,                   // Size of the memory frame in bytes
-    pub is_free: Cell<bool>,                 // Is the frame free?
-    pub flags: Cell<usize>,                  // Flags for the frame
-    pub owner: Cell<Owner>,                  // Owner of the frame
-    pub idx: Cell<usize>,                    // Index of this region in the bitmap
-    pub size_node: Cell<RBNode<MemRegionDescr>>, // Node for the size tree
-    pub addr_node: Cell<RBNode<MemRegionDescr>>, // Node for the address tree
+    pub start_addr: Cell<usize>,            // Starting address of the memory frame
+    pub size: Cell<usize>,                  // Size of the memory frame in bytes
+    pub is_free: Cell<bool>,                // Is the frame free?
+    pub flags: Cell<usize>,                 // Flags for the frame
+    pub owner: Cell<Owner>,                 // Owner of the frame
+    pub idx: Cell<usize>,                   // Index of this region in the bitmap
+    pub size_node: Cell<MemNode>,           // Node for the size tree
+    pub addr_node: Cell<MemNode>,           // Node for the address tree
 }
 
 pub const MEM_REGION_DESCR_PER_SMALL_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / core::mem::size_of::<MemRegionDescr>();
@@ -30,8 +122,8 @@ impl MemRegionDescr {
             flags: Cell::new(ZERO_USIZE),
             owner: Cell::new(Owner::Nobody),
             idx: Cell::new(ZERO_USIZE),
-            size_node: Cell::new(RBNode::<MemRegionDescr>::new()),
-            addr_node: Cell::new(RBNode::<MemRegionDescr>::new()),
+            size_node: Cell::new(MemNode::new()),
+            addr_node: Cell::new(MemNode::new()),
         }
     }
 
@@ -49,26 +141,18 @@ impl MemRegionDescr {
             flags: Cell::new(flags),
             owner: Cell::new(owner),
             idx: Cell::new(ZERO_USIZE),
-            size_node: Cell::new(RBNode::<MemRegionDescr>::new()),
-            addr_node: Cell::new(RBNode::<MemRegionDescr>::new()),
+            size_node: Cell::new(MemNode::new()),
+            addr_node: Cell::new(MemNode::new()),
         }
     }
 
-    pub fn get_size_node_ptr(&self) -> *mut RBNode<MemRegionDescr> {
-        self.size_node.get_mut() as *mut RBNode<MemRegionDescr>
+    pub fn size_node_ptr(&self) -> &mut MemNode {
+        self.size_node.get_mut()
     }
 
-    pub fn get_addr_node_ptr(&self) -> *mut RBNode<MemRegionDescr> {
-        self.addr_node.get_mut() as *mut RBNode<MemRegionDescr>
+    pub fn addr_node_ptr(&self) -> &mut MemNode {
+        self.addr_node.get_mut()
     }
-}
-
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
-pub enum MemTreeTrunk {
-    SizeFree,
-    SizeAlloc,
-    AddressFree,
-    AddressAlloc,
 }
 
 #[allow(dead_code)]
@@ -79,10 +163,10 @@ pub struct TreeAllocator {
     count: Cell<usize>,
     capacity: Cell<usize>,
 
-    rb_size_free: Cell<RBTree<MemRegionDescr>>,
-    rb_addr_free: Cell<RBTree<MemRegionDescr>>,
-    rb_size_alloc: Cell<RBTree<MemRegionDescr>>,
-    rb_addr_alloc: Cell<RBTree<MemRegionDescr>>,
+    rb_size_free: Cell<RBTree<MemNode>>,
+    rb_addr_free: Cell<RBTree<MemNode>>,
+    rb_size_alloc: Cell<RBTree<MemNode>>,
+    rb_addr_alloc: Cell<RBTree<MemNode>>,
 
     merge_free_dealloc_count: Cell<usize>,
     pub merge_free_dealloc_interval: Cell<usize>,
@@ -105,15 +189,15 @@ impl TreeAllocator {
                     (*region_ptr).owner.set(owner);
                     (*region_ptr).idx.set(idx);
 
-                    let size_node = (*region_ptr).size_node.get_mut();
-                    size_node.value.set(idx);
-                    size_node.key.set(make128(size, start_addr.as_usize()));
-                    size_node.ptr.set(region_ptr);
+                    let size_node = (*region_ptr).size_node_ptr();
+                    size_node.set_value(idx);
+                    size_node.set_key(make128(size, start_addr.as_usize()));
+                    size_node.set_ptr(region_ptr as *mut ());
 
-                    let addr_node = (*region_ptr).addr_node.get_mut();
-                    addr_node.value.set(idx);
-                    addr_node.key.set(start_addr.as_usize() as u128);
-                    addr_node.ptr.set(region_ptr);
+                    let addr_node = (*region_ptr).addr_node_ptr();
+                    addr_node.set_value(idx);
+                    addr_node.set_key(start_addr.as_usize() as u128);
+                    addr_node.set_ptr(region_ptr as *mut ());
 
                     if is_free {
                         self.rb_size_free.get_mut().put(size_node);
@@ -133,17 +217,17 @@ impl TreeAllocator {
     }
 
     // completely remove a region from the tree
-    pub fn remove_region(&self, node: *mut RBNode<MemRegionDescr>) {
-        let region_idx = unsafe { (*node).idx.get() };
-        let regions = self.get_mem_region_array();
+    pub fn remove_region(&self, node: *mut MemNode) {
+        let region_idx = unsafe { (*node).idx() };
+        let regions = self.mem_region_array();
 
         unsafe {
             if regions[region_idx].is_free.get() {
-                self.rb_size_free.get_mut().delete((*node).key.get());
-                self.rb_addr_free.get_mut().delete((*node).key.get());
+                self.rb_size_free.get_mut().delete((*node).key());
+                self.rb_addr_free.get_mut().delete((*node).key());
             } else {
-                self.rb_size_alloc.get_mut().delete((*node).key.get());
-                self.rb_addr_alloc.get_mut().delete((*node).key.get());
+                self.rb_size_alloc.get_mut().delete((*node).key());
+                self.rb_addr_alloc.get_mut().delete((*node).key());
             }
         }
 
@@ -153,7 +237,7 @@ impl TreeAllocator {
     }
     
     // get access to the memory region array
-    fn get_mem_region_array(&self) -> &'static mut [MemRegionDescr] {
+    fn mem_region_array(&self) -> &'static mut [MemRegionDescr] {
         unsafe { 
             core::slice::from_raw_parts_mut(
                 raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(self.phys_base.get()), 
@@ -163,12 +247,13 @@ impl TreeAllocator {
     // Alloc before doing anything else
     fn alloc_new_slot_mut(&self) -> Option<(*mut MemRegionDescr, usize)> {
         let new_struct_slot = unsafe { (*self.bitmap).find_first_set() };
+        
         match new_struct_slot {
             Some(slot) => {
-                let mut new_struct_addr = self.phys_base.clone();
-                new_struct_addr.get_mut().inner_inc_by_type::<MemRegionDescr>(slot);
+                let mut new_struct_addr = self.phys_base.get().clone();
+                new_struct_addr.inner_inc_by_type::<MemRegionDescr>(slot);
 
-                let new_struct_ptr = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(new_struct_addr.get());
+                let new_struct_ptr = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(new_struct_addr);
                 unsafe { (*self.bitmap).clear(slot); }
                 Some((new_struct_ptr, slot))
             }
@@ -177,7 +262,7 @@ impl TreeAllocator {
     }
 
     // Dealloc after doing everything else
-    fn dealloc_slot_by_ptr(&self, ptr: *mut RBNode<MemRegionDescr>) {
+    fn dealloc_slot_by_ptr(&self, ptr: *mut MemNode) {
         let ptr_bitmap_slot = (raw::ptr_to_usize::<MemRegionDescr>(ptr as *const MemRegionDescr) - self.phys_base.get().as_usize()) / core::mem::size_of::<MemRegionDescr>();
         unsafe { ptr.write_bytes(ZERO_U8, core::mem::size_of::<MemRegionDescr>()); }
         unsafe { (*self.bitmap).set(ptr_bitmap_slot); }
@@ -195,11 +280,15 @@ impl TreeAllocator {
     // find the region that wastes the least amount of space for the specified size
     // if there's any more space than MEMORY_MAX_WASTE, split the region
     pub fn alloc(&self, size: usize, owner: Owner) -> Option<*mut MemRegionDescr> {
-        let new_block = self.rb_size_free.get_mut().ceiling_node(make128(size, 0));
+        let new_block = self.rb_size_free
+            .get_mut()
+            .ceiling_node(
+                make128(size, 0));
+
         match new_block {
             Some(block) => {
                 let block_idx = unsafe { (*block).idx.get() };
-                let mem_regions = self.get_mem_region_array();
+                let mem_regions = self.mem_region_array();
 
                 let block_size = mem_regions[block_idx].size.get();
                 let block_start_addr = mem_regions[block_idx].start_addr.get();
@@ -225,7 +314,7 @@ impl TreeAllocator {
     // and the new region is the region that was created from the split
     pub fn split_region(&self, region: *mut MemRegionDescr, new_size: usize, owner: Owner) -> Option<(*mut MemRegionDescr, *mut MemRegionDescr)> {
         let region_idx = unsafe { (*region).idx.get() };
-        let mem_regions = self.get_mem_region_array();
+        let mem_regions = self.mem_region_array();
 
         let region_size = mem_regions[region_idx].size.get();
         let region_start_addr = mem_regions[region_idx].start_addr.get();
@@ -239,11 +328,11 @@ impl TreeAllocator {
                     // update the old region
                     unsafe {
                         // remove the old region from each tree
-                        let size_node = (*region).size_node.get_mut();
-                        let addr_node = (*region).addr_node.get_mut();
+                        let size_node = (*region).size_node_ptr();
+                        let addr_node = (*region).addr_node_ptr();
 
-                        self.rb_size_free.get_mut().delete(size_node.key.get());
-                        self.rb_addr_free.get_mut().delete(addr_node.key.get());
+                        self.rb_size_free.get_mut().delete(size_node.key());
+                        self.rb_addr_free.get_mut().delete(addr_node.key());
                         
                         // update the old region
                         (*region).size.set(new_size);
@@ -251,11 +340,11 @@ impl TreeAllocator {
                         (*region).owner.set(owner);
                         (*region).idx.set(region_idx);
                         
-                        size_node.value.set(region_idx);
-                        size_node.key.set(make128(new_size, region_start_addr));
+                        size_node.set_value(region_idx);
+                        size_node.set_key(make128(new_size, region_start_addr));
                         
-                        addr_node.value.set(region_idx);
-                        addr_node.key.set(region_start_addr as u128);
+                        addr_node.set_value(region_idx);
+                        addr_node.set_key(region_start_addr as u128);
 
                         // add the old region back to the tree with its new info
                         self.rb_size_alloc.get_mut().put(size_node);
@@ -270,11 +359,11 @@ impl TreeAllocator {
                         (*new_region_ptr).owner.set(Owner::Nobody);
                         (*new_region_ptr).idx.set(new_region_idx);
 
-                        let size_node = (*new_region_ptr).size_node.get_mut();
+                        let size_node = (*new_region_ptr).size_node_ptr();
                         size_node.value.set(new_region_idx);
                         size_node.key.set(make128(region_size - new_size, region_start_addr + new_size));
 
-                        let addr_node = (*new_region_ptr).addr_node.get_mut();
+                        let addr_node = (*new_region_ptr).addr_node_ptr();
                         addr_node.value.set(new_region_idx);
                         addr_node.key.set((region_start_addr + new_size) as u128);
 
@@ -296,7 +385,7 @@ impl TreeAllocator {
     // mark a region as allocated
     pub fn mark_allocated(&self, region: *mut MemRegionDescr, owner: Owner) {
         let region_idx = unsafe { (*region).idx.get() };
-        let mem_regions = self.get_mem_region_array();
+        let mem_regions = self.mem_region_array();
 
         // see if the region is already allocated
         // if it is, then we don't need to do anything
@@ -314,8 +403,8 @@ impl TreeAllocator {
             // always remove the region from the trees before making
             // any changes to the region's keys, otherwise the rb tree
             // will be corrupted
-            let size_node = (*region).size_node.get_mut();
-            let addr_node = (*region).addr_node.get_mut();
+            let size_node = (*region).size_node_ptr();
+            let addr_node = (*region).addr_node_ptr();
 
             self.rb_size_free.get_mut().delete(size_node.key.get());
             self.rb_addr_free.get_mut().delete(addr_node.key.get());
@@ -336,7 +425,7 @@ impl TreeAllocator {
     // mark a region as free
     pub fn mark_free(&self, region: *mut MemRegionDescr) {
         let region_idx = unsafe { (*region).idx.get() };
-        let mem_regions = self.get_mem_region_array();
+        let mem_regions = self.mem_region_array();
 
         // see if the region is already allocated
         // if it's free, then we don't need to do anything
@@ -354,8 +443,8 @@ impl TreeAllocator {
             // always remove the region from the trees before making
             // any changes to the region's keys, otherwise the rb tree
             // will be corrupted
-            let size_node = (*region).size_node.get_mut();
-            let addr_node = (*region).addr_node.get_mut();
+            let size_node = (*region).size_node_ptr();
+            let addr_node = (*region).addr_node_ptr();
 
             self.rb_size_alloc.get_mut().delete(size_node.key.get());
             self.rb_addr_alloc.get_mut().delete(addr_node.key.get());
@@ -386,10 +475,10 @@ impl FrameAllocator for TreeAllocator {
             count: Cell::new(0),
             capacity: Cell::new(0),
 
-            rb_size_free: Cell::new(RBTree::<MemRegionDescr>::new()),
-            rb_addr_free: Cell::new(RBTree::<MemRegionDescr>::new()),
-            rb_size_alloc: Cell::new(RBTree::<MemRegionDescr>::new()),
-            rb_addr_alloc: Cell::new(RBTree::<MemRegionDescr>::new()),
+            rb_size_free: Cell::new(RBTree::<MemNode>::new()),
+            rb_addr_free: Cell::new(RBTree::<MemNode>::new()),
+            rb_size_alloc: Cell::new(RBTree::<MemNode>::new()),
+            rb_addr_alloc: Cell::new(RBTree::<MemNode>::new()),
 
             merge_free_dealloc_count: Cell::new(0),
             merge_free_dealloc_interval: Cell::new(FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC),
@@ -423,97 +512,38 @@ impl FrameAllocator for TreeAllocator {
     // page_base is the base address of the page to deallocate, not
     // the base address of the region that contains the page
     fn dealloc_page(&self, page_base: PhysAddr, owner: Owner, page_size: PageSize) {
-        // first we need to find the region that contains this page_base in the alloc trunk
-        let root = self.rb_addr_alloc.get_mut().root.get();
-
-        // locate the region that contains this page
-        let mut current = root;
-
-        while !current.is_null() {
-            if unsafe { (*(*current).ptr.get()).start_addr.get() } <= page_base.as_usize()
-                && unsafe { (*(*current).ptr.get()).start_addr.get() + (*(*current).ptr.get()).size.get() } > page_base.as_usize()
-            {
-                // we found the region that contains this page
-                // now we need to mark it as free if the owners match
-                // and that the region's size == the page_size specified
-                if unsafe { (*(*current).ptr.get()).owner.get() } == owner &&
-                   unsafe { (*(*current).ptr.get()).size.get() } == page_size.into_bits() {
-                    self.mark_free(current);
-                    return;
-                } else {
-                    return;
-                }
-            } else {
-                current = unsafe { (*current).right_addr.get() };
-            }
-        }
+        
     }
 
     fn free_page_count(&self) -> usize {
-        self.count_free() / MEMORY_DEFAULT_PAGE_USIZE
+        
     }
 
     fn free_mem_count(&self) -> usize {
-        self.count_free()
+        
     }
 
     fn page_count(&self) -> usize {
-        self.count.get() / MEMORY_DEFAULT_PAGE_USIZE
+        
     }
 
     fn mem_count(&self) -> usize {
-        self.count.get()
+        
     }
 
     fn alloc_contiguous(&self, size: usize, owner: Owner) -> Option<PhysAddr> {
-        let new_alloc = self.find(size, owner);
-
-        match new_alloc {
-            Some(region) => {
-                self.mark_allocated(region, owner);
-                let frame_base_addr = unsafe { (*region).start_addr.get() };
-                Some(PhysAddr(frame_base_addr))
-            }
-            None => None,
-        }
+        
     }
 
     fn dealloc_contiguous(&self, page_base: PhysAddr, size: usize, owner: Owner) {
-        // first we need to find the region that contains this page_base in the alloc trunk
-        let root = self.rb_addr_alloc.get_mut().root.get();
-
-        // locate the region that contains this page
-        let mut current = root;
-
-        while !current.is_null() {
-            if unsafe { (*current).start_addr.get() } <= page_base.as_usize()
-                && unsafe { (*current).start_addr.get() + (*current).size.get() } > page_base.as_usize()
-            {
-                // we found the region that contains this page
-                // now we need to mark it as free as long as the
-                // owners match and the size is the same
-                if unsafe { (*current).owner.get() } == owner &&
-                   unsafe { (*current).size.get() } == size {
-                    self.mark_free(current);
-                    return; 
-                } else {
-                    return;
-                }
-            }
-            else {
-                current = unsafe { (*current).right_addr.get() };
-            }
-        }
+        
     }
 
     fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool {
-        let region = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(page_base.align_4k());
-        unsafe { (*region).is_free.get() }
+        
     }
 
     fn is_frame_index_free(&self, page_idx: usize) -> bool {
-        let mem_addr = PhysAddr(page_idx * MEMORY_DEFAULT_PAGE_USIZE);
-        let region = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(mem_addr);
-        unsafe { (*region).is_free.get() }
+        
     }
 }

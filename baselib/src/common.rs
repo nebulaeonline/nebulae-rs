@@ -570,7 +570,7 @@ pub mod kernel_statics {
     use uefi::prelude::*;
     use uefi::table::boot::*;
 
-    use crate::framemgr::*;
+    use crate::frame_alloc::*;
     use crate::memory::*;
 
     // ALWAYS LOCK HIGH TO LOW WHEN TAKING MULTIPLE LOCKS;

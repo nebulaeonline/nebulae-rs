@@ -1,5 +1,5 @@
 use crate::common::base::*;
-pub use crate::framemgr::*;
+pub use crate::frame_alloc::*;
 
 use core::convert::{From, Into};
 use core::mem;
