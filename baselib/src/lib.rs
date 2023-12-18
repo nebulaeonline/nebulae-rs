@@ -10,18 +10,18 @@
 // #![feature(generic_const_exprs)]
 
 // baselib mods
-pub mod kernel_statics;
-pub mod genesis;
-pub mod structures;
 pub mod bitmap;
 pub mod common;
 pub mod cpu;
 pub mod frame_alloc;
+pub mod genesis;
 pub mod interrupts;
 pub mod kalloc;
+pub mod kernel_statics;
 pub mod memory;
 pub mod panic;
 pub mod status;
+pub mod structures;
 
 // baselib::arch mods
 pub mod arch {

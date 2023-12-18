@@ -1,8 +1,8 @@
 use core::mem;
 
+use crate::bitmap::*;
 use crate::common::base::*;
 use crate::kernel_statics::*;
-use crate::bitmap::*;
 
 #[repr(C)]
 pub struct GenesisBlock {
@@ -13,7 +13,7 @@ pub struct GenesisBlock {
     pub phys_mem_max: PhysAddr,
     pub page_info: *mut [pages::PageInfo],
     pub mem_regions: *mut [MemRegionDescr],
-    pub region_bitmap: *mut Bitmap, 
+    pub region_bitmap: *mut Bitmap,
     pub base_vas: spin::Mutex<Vas>,
 }
 
@@ -34,11 +34,17 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
     static mut GBI: Option<(&mut GenesisBlock, usize, PhysAddr)> = None;
 
     if unsafe { GBI.is_some() } {
-        unsafe { return (GBI.as_mut().unwrap().0, GBI.as_ref().unwrap().1, GBI.as_ref().unwrap().2); }
+        unsafe {
+            return (
+                GBI.as_mut().unwrap().0,
+                GBI.as_ref().unwrap().1,
+                GBI.as_ref().unwrap().2,
+            );
+        }
     }
 
     use uefi::table::boot::*;
-    
+
     let mut largest_conv_block: PhysAddr = PhysAddr::from(usize::MIN);
     let mut largest_conv_block_size = 0usize;
     let mut smallest_conv_block: PhysAddr = PhysAddr::from(usize::MAX);
@@ -63,10 +69,9 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
 
     // Figure out how many we need (the map size will change)
     let mm_sizes = st.boot_services().memory_map_size();
-    let mut mm_pages_reqd = pages::calc_pages_reqd(
-        mm_sizes.map_size, PageSize::Small);
+    let mut mm_pages_reqd = pages::calc_pages_reqd(mm_sizes.map_size, PageSize::Small);
     let mut mm_total_allocation = pages::pages_to_bytes(mm_pages_reqd);
-    
+
     // if we have less than 64 entries worth of free space, add a page to the
     // allocation
     if mm_total_allocation - mm_sizes.map_size < (64 * mm_sizes.entry_size) {
@@ -85,14 +90,17 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
     match mm_result {
         Ok(frame) => {
             mm = unsafe {
-                st.boot_services().memory_map(
-                    core::slice::from_raw_parts_mut(
+                st.boot_services()
+                    .memory_map(core::slice::from_raw_parts_mut(
                         frame as *mut u8,
                         pages::pages_to_bytes(mm_pages_reqd),
-                    )
-                ).unwrap_or_else(|e| {
-                    panic!("Physical frame allocator failed to read the UEFI memory map: {:?}", e);
-                })
+                    ))
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Physical frame allocator failed to read the UEFI memory map: {:?}",
+                            e
+                        );
+                    })
             };
         }
         Err(_) => panic!("Failed to allocate memory for physical frame allocator"),
@@ -100,7 +108,7 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
 
     // Process the memory map
     let mut max_phys_present: usize = 0;
-    
+
     for e in mm.entries() {
         // output mm in debug mode
         #[cfg(debug_assertions)]
@@ -113,8 +121,7 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
         );
 
         if e.ty == MemoryType::CONVENTIONAL {
-            max_phys_present =
-                e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize);
+            max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize);
 
             conv_page_count += e.page_count.as_usize();
             let pb = pages::pages_to_bytes(e.page_count.as_usize());
@@ -135,21 +142,37 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
     // are the smallest and largest the same block?
     let genesis_block = if largest_conv_block == smallest_conv_block {
         // if so, then we can just grab the last page
-        align_down(largest_conv_block.as_usize() + largest_conv_block_size - 1, MEMORY_DEFAULT_PAGE_USIZE)
+        align_down(
+            largest_conv_block.as_usize() + largest_conv_block_size - 1,
+            MEMORY_DEFAULT_PAGE_USIZE,
+        )
     } else {
         // otherwise, we need to see if the largest block's base address is page aligned
         // if it is, then we need to grab the last page from the smallest block
         // if it isn't, then we can grab the first page from the largest block
         if largest_conv_block.is_page_aligned() {
-            align_down(smallest_conv_block.as_usize() + smallest_conv_block_size - 1, MEMORY_DEFAULT_PAGE_USIZE)
+            align_down(
+                smallest_conv_block.as_usize() + smallest_conv_block_size - 1,
+                MEMORY_DEFAULT_PAGE_USIZE,
+            )
         } else {
             align_down(largest_conv_block.as_usize(), MEMORY_DEFAULT_PAGE_USIZE)
         }
     };
 
-    unsafe { GBI = Some((raw::raw_to_static_ref_mut::<GenesisBlock, PhysAddr>(PhysAddr::from(genesis_block)), conv_page_count, PhysAddr::from(max_phys_present))); }
+    unsafe {
+        GBI = Some((
+            raw::raw_to_static_ref_mut::<GenesisBlock, PhysAddr>(PhysAddr::from(genesis_block)),
+            conv_page_count,
+            PhysAddr::from(max_phys_present),
+        ));
+    }
 
-    (raw::raw_to_static_ref_mut(PhysAddr::from(genesis_block)), conv_page_count, PhysAddr::from(max_phys_present))
+    (
+        raw::raw_to_static_ref_mut(PhysAddr::from(genesis_block)),
+        conv_page_count,
+        PhysAddr::from(max_phys_present),
+    )
 }
 
 // init the genesis block
@@ -157,13 +180,15 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
 pub fn init_genesis_block() {
     use crate::common::*;
     use core::sync::atomic::{AtomicBool, Ordering};
-    
+
     static mut FUSE: AtomicBool = AtomicBool::new(false);
 
     if unsafe { FUSE.load(Ordering::Relaxed) } {
         return;
     } else {
-        unsafe { FUSE.store(true, Ordering::Relaxed); }
+        unsafe {
+            FUSE.store(true, Ordering::Relaxed);
+        }
     }
 
     let mut mm: MemoryMap;
@@ -172,7 +197,9 @@ pub fn init_genesis_block() {
 
     // set the basic kernel table parameters
     gb.magic = NEBULAE;
-    gb.genesis_ptr = raw::raw_to_static_ref_mut::<GenesisBlock, PhysAddr>(PhysAddr::from(gb as *mut GenesisBlock as usize));
+    gb.genesis_ptr = raw::raw_to_static_ref_mut::<GenesisBlock, PhysAddr>(PhysAddr::from(
+        gb as *mut GenesisBlock as usize,
+    ));
     gb.conv_pages = conv_page_count;
     gb.total_pages = pages::calc_pages_reqd(max_phys_mem.as_usize(), PageSize::Small);
     gb.phys_mem_max = max_phys_mem;
@@ -183,8 +210,11 @@ pub fn init_genesis_block() {
     // we need to know how many pages it will take to track the entire physical memory
     // this is the number of pages to track with 1 node per page allocation potential
     // (the most degraded case), so we need to divide by the number of nodes per page
-    let bitmap_pages_reqd = bitindex::BitIndex::calc_bitindex_size_in_default_pages(gb.total_pages);
-    let page_info_pages_reqd = pages::calc_pages_reqd(mem::size_of::<pages::PageInfo>() * gb.total_pages, PageSize::Small);
+    let bitmap_pages_reqd = bitindex::calc_bitindex_size_in_pages(gb.total_pages, PageSize::Small);
+    let page_info_pages_reqd = pages::calc_pages_reqd(
+        mem::size_of::<pages::PageInfo>() * gb.total_pages,
+        PageSize::Small,
+    );
     let storage_pages_reqd = pages::calc_pages_reqd(
         gb.total_pages * core::mem::size_of::<MemRegionDescr>(),
         PageSize::Small,
@@ -208,11 +238,11 @@ pub fn init_genesis_block() {
         panic!("Failed to allocate memory for physical frame allocator tree bitmap");
     } else {
         unsafe {
-            *gb.region_bitmap = Bitmap::new();
-            (*gb.region_bitmap).init(
-                gb.total_pages, 
-                VirtAddr(ZERO_USIZE), 
-                VirtAddr::from(bitmap_alloc_result.unwrap()));
+            *gb.region_bitmap = Bitmap::new(Owner::System);
+            (*gb.region_bitmap).init_phys_direct(
+                gb.total_pages,
+                PhysAddr::from(bitmap_alloc_result.unwrap()),
+            );
         }
     }
 
@@ -239,8 +269,9 @@ pub fn init_genesis_block() {
         gb.page_info = unsafe {
             core::slice::from_raw_parts_mut::<pages::PageInfo>(
                 page_info_alloc_result.unwrap() as *mut pages::PageInfo,
-                bitindex::BitIndex::calc_bitindex_size_in_usize(gb.total_pages))
-            };
+                bitindex::calc_bitindex_size_in_usize(gb.total_pages),
+            )
+        };
 
         // write the page info structs with default info
         for i in 0..gb.total_pages {
@@ -266,15 +297,17 @@ pub fn init_genesis_block() {
 
             if e.ty != MemoryType::CONVENTIONAL {
                 let mut frame_addr: PhysAddr = PhysAddr::from(e.phys_start);
-                
+
                 unsafe {
                     for i in 0..e.page_count as usize {
                         let frame_idx = pages::usize_to_page_index(frame_addr.as_usize());
 
-                        gb.page_info.as_mut().unwrap()[frame_idx].status = pages::PageStatus::Reserved;
+                        gb.page_info.as_mut().unwrap()[frame_idx].status =
+                            pages::PageStatus::Reserved;
                         gb.page_info.as_mut().unwrap()[frame_idx].owner = Owner::System;
                         gb.page_info.as_mut().unwrap()[frame_idx].purpose = e.ty;
-                        gb.page_info.as_mut().unwrap()[frame_idx].uefi_flags = e.att.bits() as usize;
+                        gb.page_info.as_mut().unwrap()[frame_idx].uefi_flags =
+                            e.att.bits() as usize;
                         frame_addr.inner_inc_by_page_size(PageSize::Small);
                     }
                 }
@@ -302,8 +335,9 @@ pub fn init_genesis_block() {
         gb.mem_regions = unsafe {
             core::slice::from_raw_parts_mut::<MemRegionDescr>(
                 storage_alloc_result.unwrap() as *mut MemRegionDescr,
-                bitindex::BitIndex::calc_bitindex_size_in_usize(gb.total_pages))
-            };
+                bitindex::calc_bitindex_size_in_usize(gb.total_pages),
+            )
+        };
     }
 
     #[cfg(debug_assertions)]
