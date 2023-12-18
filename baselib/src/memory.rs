@@ -1,5 +1,5 @@
 use crate::common::base::*;
-pub use crate::frame_alloc::*;
+pub use crate::framemgr::*;
 
 use core::convert::{From, Into};
 use core::mem;
@@ -125,6 +125,21 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         let x = self.align_1g().as_usize();
         let y = self.as_usize();
         x == y
+    }
+
+    #[cfg(target_arch = "x86")]
+    fn is_page_aligned(&self) -> bool {
+        self.is_aligned_4k() || self.is_aligned_4m()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn is_page_aligned(&self) -> bool {
+        self.is_aligned_4k() || self.is_aligned_2m() || self.is_aligned_1g()
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn is_page_aligned(&self) -> bool {
+        self.is_aligned_4k() || self.is_aligned_16k() || self.is_aligned_64k()
     }
 }
 
@@ -445,10 +460,6 @@ impl<T: MemAddr + Align + Copy> MemoryUnit<T> {
     }
 }
 
-pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
-    (size + page_size.into_bits() - 1) / page_size.into_bits()
-}
-
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BitPattern {
@@ -478,4 +489,268 @@ pub trait AddrSpace {
     fn new() -> Self;
     fn switch_to(&mut self);
     fn identity_map_based_on_memory_map(&mut self);
+}
+
+pub trait FrameAllocator {
+    fn new() -> Self;
+    fn init(&self);
+    fn alloc_page(&self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
+    fn dealloc_page(&self, page_base: PhysAddr, owner: Owner, page_size: PageSize);
+    fn free_page_count(&self) -> usize;
+    fn free_mem_count(&self) -> usize;
+    fn page_count(&self) -> usize;
+    fn mem_count(&self) -> usize;
+    fn alloc_contiguous(&self, size: usize, owner: Owner) -> Option<PhysAddr>;
+    fn dealloc_contiguous(&self, page_base: PhysAddr, size: usize, owner: Owner);
+    fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool;
+    fn is_frame_index_free(&self, page_idx: usize) -> bool;
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(usize)]
+pub enum Owner {
+    Nobody = 0,
+    System = 1,
+    Memory = 2,
+    Uefi = 3,
+    User(usize),
+    Verboten = usize::MAX,
+}
+
+// functions for constructing bitmap-like structures
+pub mod bitindex {
+    use crate::common::base::*;
+
+    pub struct BitIndex {}
+    impl BitIndex {
+        pub fn calc_bitindex_size_in_usize(capacity: usize) -> usize {
+            (capacity + (usize::BITS as usize - 1)) / usize::BITS as usize
+        }
+
+        pub fn calc_bitindex_size_in_bytes(capacity: usize) -> usize {
+            BitIndex::calc_bitindex_size_in_usize(capacity) * MACHINE_UBYTES
+        }
+
+        pub fn calc_bitindex_size_in_default_pages(capacity: usize) -> usize {
+            (BitIndex::calc_bitindex_size_in_bytes(capacity) + MEMORY_DEFAULT_PAGE_USIZE - 1) / MEMORY_DEFAULT_PAGE_USIZE
+        }
+
+        pub fn calc_wasted_bytes_in_default_pages(capacity: usize) -> usize {
+            BitIndex::calc_bitindex_size_in_default_pages(capacity) * MEMORY_DEFAULT_PAGE_USIZE - BitIndex::calc_bitindex_size_in_bytes(capacity)        
+        }
+    }
+}
+
+// the genesis
+// These are the naughty functions that need to be
+// used during scaffolding from the inside, but that
+// should be eliminated long-term
+pub mod raw {
+    use super::*;
+    use core::mem;
+
+    // our raw memset
+    pub fn memset_size(start_addr: PhysAddr, size: usize, value: u8) {
+        unsafe {
+            let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, size);
+
+            for i in 0..size {
+                base[i] = value;
+            }
+        }
+    }
+
+    pub fn memset_range_inclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
+        let region_size = end_addr.as_usize() - start_addr.as_usize() + 1;
+        unsafe {
+            let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
+
+            for i in 0..region_size {
+                base[i] = value;
+            }
+        }
+    }
+
+    pub fn memset_range_exclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
+        let region_size = end_addr.as_usize() - start_addr.as_usize();
+        unsafe {
+            let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, region_size);
+
+            for i in 0..region_size {
+                base[i] = value;
+            }
+        }
+    }
+
+    // our raw memcpys
+    pub fn memcpy(src_addr: PhysAddr, dest_addr: PhysAddr, size: usize) {
+        unsafe {
+            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const u8, size);
+            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut u8, size);
+
+            for i in 0..size {
+                dest[i] = src[i];
+            }
+        }
+    }
+
+    // our raw memcpy_aligned
+    pub fn memcpy_usize_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
+        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
+        debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
+        debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
+
+        unsafe {
+            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
+            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
+
+            for i in 0..size_in_bytes {
+                dest[i] = src[i];
+            }
+        }
+    }
+
+    // our raw memmove
+    pub fn memmove(src_addr: PhysAddr, dest_addr: PhysAddr, size: usize) {
+        unsafe {
+            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const u8, size);
+            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut u8, size);
+
+            for i in 0..size {
+                dest[i] = src[i];
+                src[i] = 0;
+            }
+        }
+    }
+
+    // our raw memmove_aligned
+    pub fn memmove_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
+        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
+        debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
+        debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
+
+        unsafe {
+            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
+            let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
+
+            for i in 0..size_in_bytes {
+                dest[i] = src[i];
+                src[i] = 0;
+            }
+        }
+    }
+
+    // ref to an address
+    #[inline(always)]
+    pub fn ref_to_raw<T, AT: MemAddr + From<usize>>(reff: &T) -> AT {
+        let addr = unsafe { mem::transmute::<&T, usize>(reff) };
+        AT::from(addr)
+    }
+
+    // ref to a usize address
+    #[inline(always)]
+    pub fn ref_to_usize<T>(reff: &T) -> usize {
+        unsafe { mem::transmute::<&T, usize>(reff) }
+    }
+
+    // mut ptr to an address
+    #[inline(always)]
+    pub fn ptr_mut_to_raw<T, AT: MemAddr + From<usize>>(reff: *mut T) -> AT {
+        let addr = unsafe { mem::transmute::<*mut T, usize>(reff) };
+        AT::from(addr)
+    }
+
+    // mut ptr to a usize address
+    #[inline(always)]
+    pub fn ptr_mut_to_usize<T>(reff: *mut T) -> usize {
+        unsafe { mem::transmute::<*mut T, usize>(reff) }
+    }
+
+    // ptr to an address
+    #[inline(always)]
+    pub fn ptr_to_raw<T, AT: MemAddr + From<usize>>(reff: *const T) -> AT {
+        let addr = unsafe { mem::transmute::<*const T, usize>(reff) };
+        AT::from(addr)
+    }
+
+    // ptr to a usize address
+    #[inline(always)]
+    pub fn ptr_to_usize<T>(reff: *const T) -> usize {
+        unsafe { mem::transmute::<*const T, usize>(reff) }
+    }
+
+    // address to ref
+    #[inline(always)]
+    pub fn raw_to_static_ref<T, AT: MemAddr + From<usize>>(addr: AT) -> &'static T {
+        unsafe { mem::transmute::<usize, &'static T>(addr.as_usize()) }
+    }
+
+    // address to mutable ref
+    #[inline(always)]
+    pub fn raw_to_static_ref_mut<T, AT: MemAddr>(addr: AT) -> &'static mut T {
+        unsafe { mem::transmute::<usize, &'static mut T>(addr.as_usize()) }
+    }
+
+    // address to const pointer
+    #[inline(always)]
+    pub fn raw_to_ptr<T, AT: MemAddr>(addr: AT) -> *const T {
+        unsafe { mem::transmute::<usize, *const T>(addr.as_usize()) }
+    }
+
+    // address to mutable pointer
+    #[inline(always)]
+    pub fn raw_to_ptr_mut<T, AT: MemAddr>(addr: AT) -> *mut T {
+        unsafe { mem::transmute::<usize, *mut T>(addr.as_usize()) }
+    }
+}
+
+pub mod pages {
+    use super::*;
+    use uefi::table::boot::*;
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum PageStatus {
+        Free,
+        Reserved,
+        Alloc,
+    }
+
+    #[repr(C)]
+    pub struct PageInfo {
+        pub phys_base: PhysAddr,
+        pub size: usize,
+        pub uefi_flags: usize,
+        pub status: PageStatus,
+        pub owner: Owner,
+        pub purpose: MemoryType,
+        pub flags: usize,
+    }
+
+    // calculate the amount of memory given the number of default sized pages
+    #[inline(always)]
+    pub const fn pages_to_bytes(page_count: usize) -> usize {
+        page_count * MEMORY_DEFAULT_PAGE_USIZE
+    }
+
+    // calculates the number of default pages given the number of bytes
+    // returns true if the number of bytes is evenly divisible by the default page size
+    // returns false otherwise
+    #[inline(always)]
+    pub const fn bytes_to_pages_is_page_sized(bytes: usize, page_size: PageSize) -> (usize, bool) {
+        let page_count = (bytes + page_size.into_bits() - 1) / page_size.into_bits();
+        let remainder = bytes % MEMORY_DEFAULT_PAGE_USIZE;
+
+        (page_count, remainder == 0)
+    }
+    
+    pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
+        (size + page_size.into_bits() - 1) / page_size.into_bits()
+    }
+
+    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
+    #[inline(always)]
+    pub const fn usize_to_page_index(raw: usize) -> usize {
+        raw >> MEMORY_DEFAULT_SHIFT
+    }
 }

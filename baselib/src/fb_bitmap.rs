@@ -20,14 +20,14 @@ use uefi::table::boot::*;
 // This is done to be able to use special CPU instructions to search the
 // bitmap.  So the language of set*() and clear*() is reversed from normal.
 
-pub struct FrameAllocator {
+pub struct BitmapAllocator {
     bitmap: Bitmap,
     buffer: *mut [u8; 2 * MEMORY_DEFAULT_PAGE_USIZE],
     buffer_allocated: bool,
 }
 
-impl FrameAllocator {
-    pub fn new() -> Self {
+impl FrameAllocator for BitmapAllocator {
+    fn new() -> Self {
         Self {
             bitmap: Bitmap::new(),
             buffer: ptr::null_mut(),
@@ -35,7 +35,7 @@ impl FrameAllocator {
         }
     }
 
-    pub fn dealloc_buffer(&mut self) {
+    fn dealloc_temp_buffer(&self) {
         match self.buffer_allocated {
             true => {
                 let buf_phys =
@@ -63,7 +63,7 @@ impl FrameAllocator {
     // at this point we are still in uefi boot services mode
     // as soon as the frame allocator is initialized, we will
     // exit uefi boot services mode
-    pub fn init(&mut self) {
+    fn init(&self) {
         let mut mm: MemoryMap;
 
         #[cfg(debug_assertions)]
@@ -229,7 +229,7 @@ impl FrameAllocator {
         }
     }
 
-    pub fn alloc_page(&mut self) -> Option<PhysAddr> {
+    fn alloc_page(&self) -> Option<PhysAddr> {
         // Find an available page in the bitmap.
         let first_frame = self.bitmap.find_first_set();
 
@@ -244,16 +244,16 @@ impl FrameAllocator {
         }
     }
 
-    pub fn dealloc_page(&mut self, page_base: PhysAddr) {
+    fn dealloc_page(&self, page_base: PhysAddr) {
         self.bitmap
             .set(page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE);
     }
 
-    pub fn free_page_count(&self) -> usize {
+    fn free_page_count(&self) -> usize {
         self.bitmap.bit_set_count()
     }
 
-    pub fn alloc_contiguous(&mut self, size: usize) -> Option<PhysAddr> {
+    fn alloc_contiguous(&self, size: usize) -> Option<PhysAddr> {
         let page_count = calc_pages_reqd(size, PageSize::Small);
         let frame_base = self.bitmap.find_first_set_region(page_count);
 
@@ -268,11 +268,7 @@ impl FrameAllocator {
         }
     }
 
-    pub fn alloc_contiguous_page_aligned(
-        &mut self,
-        size: usize,
-        page_size: PageSize,
-    ) -> Option<PhysAddr> {
+    fn alloc_contiguous_page_aligned(&self, size: usize, page_size: PageSize) -> Option<PhysAddr> {
         let mut current_page_idx = 0usize;
         let reqd_page_count = calc_pages_reqd(size, PageSize::Small);
         let max_phys_idx = unsafe { PHYS_MEM_MAX_USIZE_IDX_2.lock().as_ref().unwrap().clone() };
@@ -303,18 +299,18 @@ impl FrameAllocator {
         None
     }
 
-    pub fn dealloc_contiguous(&mut self, page_base: PhysAddr, size: usize) {
+    fn dealloc_contiguous(&self, page_base: PhysAddr, size: usize) {
         let page_count = calc_pages_reqd(size, PageSize::Small);
         let start_idx = page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE;
         self.bitmap.set_range(start_idx, start_idx + page_count);
     }
 
-    pub fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool {
+    fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool {
         self.bitmap
             .is_set(page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE)
     }
 
-    pub fn is_frame_index_free(&self, page_idx: usize) -> bool {
+    fn is_frame_index_free(&self, page_idx: usize) -> bool {
         self.bitmap.is_set(page_idx)
     }
 }

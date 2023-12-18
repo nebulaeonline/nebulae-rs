@@ -10,10 +10,13 @@
 // #![feature(generic_const_exprs)]
 
 // baselib mods
+pub mod genesis;
+pub mod structures;
 pub mod bitmap;
 pub mod common;
 pub mod cpu;
-pub mod frame_alloc;
+//pub mod fb_bitmap;
+pub mod framemgr;
 pub mod interrupts;
 pub mod kalloc;
 pub mod memory;
