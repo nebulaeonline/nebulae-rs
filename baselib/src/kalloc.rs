@@ -1,7 +1,6 @@
 use crate::bitmap::*;
 use crate::common::base::*;
 use crate::common::kernel_statics::*;
-use crate::common::naughty::*;
 
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;
@@ -26,6 +25,7 @@ trait SubAllocator {
 #[allow(dead_code)]
 pub struct MemoryPool {
     name: &'static str,
+    //backing_store: PhysAddr,
     page_size: PageSize,
     block_size: usize,
     capacity: usize,
@@ -51,7 +51,7 @@ impl MemoryPool {
 
     #[inline(always)]
     pub fn calc_size_in_pages(capacity: usize, block_size: usize, page_size: PageSize) -> usize {
-        calc_pages_reqd(capacity * block_size, page_size)
+        pages::calc_pages_reqd(capacity * block_size, page_size)
     }
 
     pub fn new(
@@ -84,10 +84,10 @@ impl MemoryPool {
                 .as_mut()
                 .unwrap()
                 .alloc_pages_contiguous(
-                    calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
+                    pages::calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
                     self.start,
                     PageSize::Small,
-                    PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                    PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     BitPattern::ZeroZero,
                 )
         };
@@ -110,7 +110,7 @@ impl MemoryPool {
                         self.capacity * self.block_size,
                         self.start,
                         PageSize::Small,
-                        PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                        PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                         BitPattern::ZeroZero,
                     )
             };
@@ -178,7 +178,7 @@ impl SubAllocator for MemoryPool {
         self.bitmap.set(dealloc_idx);
 
         // clear the memory
-        let dealloc_begin = ptr_mut_to_addr_usize::<u8>(ptr);
+        let dealloc_begin = raw::ptr_mut_to_usize::<u8>(ptr);
         let dealloc_end = dealloc_begin + layout.size();
         for i in dealloc_begin..dealloc_end {
             unsafe { core::ptr::write_volatile(i as *mut u8, 0) };

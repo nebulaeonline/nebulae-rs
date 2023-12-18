@@ -25,6 +25,23 @@ pub mod debug_assert {
     }
 }
 
+pub mod priority {
+    pub enum Priority {
+        Lowest,
+        Anonymous,
+        Low,
+        Normal,
+        High,
+        Highest,
+        System,
+    }
+
+    pub enum Importance {
+        DesiredButNotCritical,
+        Critical,
+    }
+}
+
 pub mod bit {
     // Trait(s)
     pub trait Bitmask {
@@ -174,15 +191,15 @@ pub mod factor {
 
 pub mod base {
     use core::mem;
-    use core::ptr;
 
     pub use super::as_usize::*;
     pub use super::bit::*;
-    #[allow(unused_imports)] // not sure why this was necessary
+    #[allow(unused_imports)] // not sure why this is necessary
     pub use super::debug_assert::*;
     pub use super::factor::*;
-    pub use super::memory::*;
+    pub use super::platform_memory::*;
     pub use super::platform_constants::*;
+    pub use super::priority::*;
     pub use crate::memory::*;
 
     // Bring in the serial port
@@ -195,14 +212,15 @@ pub mod base {
     pub use crate::serial_print;
     pub use crate::serial_println;
 
+    use crate::genesis::*;
+
     // Zero Constants
     pub const ZERO_U8: u8 = 0u8;
     pub const ZERO_U16: u16 = 0u16;
     pub const ZERO_U32: u32 = 0u32;
     pub const ZERO_U64: u64 = 0u64;
     pub const ZERO_USIZE: usize = 0usize;
-    pub const ZERO_PTR: *const () = ptr::null();
-    pub const ZERO_PTR_MUT: *mut () = ptr::null_mut();
+    pub const ZERO_U128: u128 = 0u128;
 
     pub const SIZE_1B: u64 = 0x0000_0001;
     pub const SIZE_2B: u64 = 0x0000_0002;
@@ -336,6 +354,13 @@ pub mod base {
     pub const DWORD0_U64: u64 = 0x0000_0000_FFFF_FFFF;
     pub const DWORD1_U64: u64 = 0xFFFF_FFFF_0000_0000;
 
+    pub const QWORD0_U128: u128 = 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+    pub const QWORD1_U128: u128 = 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000;
+
+    pub const fn make128(high: usize, low: usize) -> u128 {
+        ((high as u128) << 64) | (low as u128)
+    }
+
     pub const MACHINE_UBYTES: usize = mem::size_of::<usize>();
     pub const MACHINE_BYTES: u64 = MACHINE_UBYTES as u64;
 
@@ -347,10 +372,34 @@ pub mod base {
     pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_16M;
 
     pub const MEMORY_DEFAULT_PAGE_USIZE: usize = USIZE_4K;
-    pub const PAGING_DEFAULT_PAGE_SIZE: usize = SIZE_4K as usize;
+    #[cfg(target_pointer_width = "32")]
+    pub const MEMORY_DEFAULT_PAGE_SIZE: u32 = SIZE_4K as u32;
+    #[cfg(target_pointer_width = "64")]
+    pub const MEMORY_DEFAULT_PAGE_SIZE: u64 = SIZE_4K;
+
+    pub const MEMORY_DEFAULT_SHIFT: usize = UFACTOR_OF_4K;
 
     pub const PAGE_TABLE_ENTRY_SIZE: usize = core::mem::size_of::<usize>();
     pub const PAGE_TABLE_MAX_ENTRIES: usize = MEMORY_DEFAULT_PAGE_USIZE / PAGE_TABLE_ENTRY_SIZE;
+
+    pub const FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC: usize = 100;
+    
+    pub fn iron() -> &'static mut GenesisBlock {
+        let (gb, _, _) = locate_genesis_block();
+        gb
+    }
+
+    // numeric alignment functions
+    // multiples must be powers of 2
+    #[inline(always)]
+    pub const fn align_up(value: usize, multiple: usize) -> usize {
+        (value + multiple - 1) & !(multiple - 1)
+    }
+
+    #[inline(always)]
+    pub const fn align_down(value: usize, multiple: usize) -> usize {
+        value - (value % multiple)
+    }
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -438,24 +487,29 @@ pub mod memory {
     pub const PAGING_PCID_CR3_MASK: usize = 0x0FFF;
 
     pub const MEMORY_DEFAULT_PAGE_USIZE: usize = USIZE_4K;
-    pub const PAGING_DEFAULT_PAGE_SIZE: usize = SIZE_4K as usize;
+    pub const MEMORY_DEFAULT_PAGE_SIZE: u32 = SIZE_4K as u32;
+    pub const MEMORY_DEFAULT_SHIFT: usize = UFACTOR_OF_4K;
 
     pub const PAGING_MEM_MAX: usize = USIZE_U32_MAX as usize;
     pub const PAGING_MEM_UMAX: usize = USIZE_MAX;
 
     pub const KERNEL_HEAP_SIZE: usize = USIZE_8M;
+    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
+
+    pub const MEMORY_GENESIS_BASE: usize = 0xb000_0000 + USIZE_64K;
 }
 
 #[cfg(target_arch = "x86_64")]
-pub mod memory {
+pub mod platform_memory {
     use super::base::*;
 
+    pub const MEM_CANONICAL: usize = 0x0000_FFFF_FFFF_FFFF;
     pub const ALIGN_MASK_4K: usize = 0x000F_FFFF_FFFF_F000;
     pub const ALIGN_MASK_2M: usize = 0x000F_FFFF_FFE0_0000;
     pub const ALIGN_MASK_1G: usize = 0x000F_FFFF_C000_0000;
 
     pub const PAGING_PRESENT: usize = ubit::bit(0);
-    pub const PAGING_WRITABLE: usize = ubit::bit(1);
+    pub const PAGING_WRITEABLE: usize = ubit::bit(1);
     pub const PAGING_USERMODE: usize = ubit::bit(2);
     pub const PAGING_WRITETHROUGH: usize = ubit::bit(3);
     pub const PAGING_CACHE_DISABLE: usize = ubit::bit(4);
@@ -471,6 +525,9 @@ pub mod memory {
     pub const PAGING_MEM_UMAX: usize = MAX_PHYSICAL_MEMORY as usize - 1;
 
     pub const KERNEL_HEAP_SIZE: usize = USIZE_32M;
+    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
+
+    pub const MEMORY_GENESIS_BASE: usize = 0xb000_0000 + USIZE_64K;
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -505,6 +562,7 @@ pub mod memory {
     pub const PAGING_GLOBAL: usize = ubit::bit(8);
 
     pub const KERNEL_HEAP_SIZE: usize = USIZE_32M;
+    pub const MEMORY_MAX_WASTE: usuze = USIZE_32K;
 }
 
 // STATICS
@@ -522,82 +580,10 @@ pub mod kernel_statics {
     pub static mut UEFI_MEMORY_MAP_1: spin::Mutex<Option<MemoryMap>> = spin::Mutex::new(None);
     pub static mut PHYS_MEM_MAX_2: spin::Mutex<Option<PhysAddr>> = spin::Mutex::new(None);
     pub static mut PHYS_MEM_MAX_USIZE_IDX_2: spin::Mutex<Option<usize>> = spin::Mutex::new(None);
-    pub static mut FRAME_ALLOCATOR_3: spin::Mutex<Option<FrameAllocator>> = spin::Mutex::new(None);
+    pub static mut FRAME_ALLOCATOR_3: spin::Mutex<Option<TreeAllocator>> = spin::Mutex::new(None);
     pub static mut KERNEL_BASE_VAS_4: spin::Mutex<Option<Vas>> = spin::Mutex::new(None);
     //pub static mut KERNEL_BUMP_ALLOC_5: spin::Mutex<Option<BumpAllocator>> = spin::Mutex::new(None);
     pub static mut USING_FRAME_ALLOCATOR_6: spin::Mutex<bool> = spin::Mutex::new(false);
-}
-
-// These are the naughty functions that need to be
-// used during scaffolding from the inside, but that
-// should be eliminated long-term
-pub mod naughty {
-    use crate::memory::*;
-
-    use core::mem;
-
-    // ref to an address
-    #[inline(always)]
-    pub fn ref_type_to_addr<T, AT: MemAddr + From<usize>>(reff: &T) -> AT {
-        let addr = unsafe { mem::transmute::<&T, usize>(reff) };
-        AT::from(addr)
-    }
-
-    // ref to a usize address
-    #[inline(always)]
-    pub fn ref_type_to_addr_usize<T>(reff: &T) -> usize {
-        unsafe { mem::transmute::<&T, usize>(reff) }
-    }
-
-    // mut ptr to an address
-    #[inline(always)]
-    pub fn ptr_mut_to_addr<T, AT: MemAddr + From<usize>>(reff: *mut T) -> AT {
-        let addr = unsafe { mem::transmute::<*mut T, usize>(reff) };
-        AT::from(addr)
-    }
-
-    // mut ptr to a usize address
-    #[inline(always)]
-    pub fn ptr_mut_to_addr_usize<T>(reff: *mut T) -> usize {
-        unsafe { mem::transmute::<*mut T, usize>(reff) }
-    }
-
-    // ptr to an address
-    #[inline(always)]
-    pub fn ptr_to_addr<T, AT: MemAddr + From<usize>>(reff: *const T) -> AT {
-        let addr = unsafe { mem::transmute::<*const T, usize>(reff) };
-        AT::from(addr)
-    }
-
-    // ptr to a usize address
-    #[inline(always)]
-    pub fn ptr_to_addr_usize<T>(reff: *const T) -> usize {
-        unsafe { mem::transmute::<*const T, usize>(reff) }
-    }
-
-    // address to ref
-    #[inline(always)]
-    pub fn addr_to_ref_type<T, AT: MemAddr + From<usize>>(addr: AT) -> &'static T {
-        unsafe { mem::transmute::<usize, &'static T>(addr.as_usize()) }
-    }
-
-    // address to mutable ref
-    #[inline(always)]
-    pub fn addr_to_ref_type_mut<T, AT: MemAddr>(addr: AT) -> &'static mut T {
-        unsafe { mem::transmute::<usize, &'static mut T>(addr.as_usize()) }
-    }
-
-    // address to const pointer
-    #[inline(always)]
-    pub fn addr_to_ptr<T, AT: MemAddr>(addr: AT) -> *const T {
-        unsafe { mem::transmute::<usize, *const T>(addr.as_usize()) }
-    }
-
-    // address to mutable pointer
-    #[inline(always)]
-    pub fn addr_to_ptr_mut<T, AT: MemAddr>(addr: AT) -> *mut T {
-        unsafe { mem::transmute::<usize, *mut T>(addr.as_usize()) }
-    }
 }
 
 pub mod as_usize {
@@ -610,19 +596,28 @@ pub mod as_usize {
             self.clone()
         }
     }
-}
-// TRAIT(S)
 
-// FUNCTIONS
+    impl AsUsize for u64 {
+        fn as_usize(&self) -> usize {
+            *self as usize
+        }
+    }
 
-// numeric alignment functions
-// multiples must be powers of 2
-#[inline(always)]
-pub const fn align_up(value: usize, multiple: usize) -> usize {
-    (value + multiple - 1) & !(multiple - 1)
-}
+    impl AsUsize for u32 {
+        fn as_usize(&self) -> usize {
+            *self as usize
+        }
+    }
 
-#[inline(always)]
-pub const fn align_down(value: usize, multiple: usize) -> usize {
-    value - (value % multiple)
+    impl AsUsize for u16 {
+        fn as_usize(&self) -> usize {
+            *self as usize
+        }
+    }
+
+    impl AsUsize for u8 {
+        fn as_usize(&self) -> usize {
+            *self as usize
+        }
+    }
 }

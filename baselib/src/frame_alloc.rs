@@ -1,320 +1,549 @@
+use core::cell::Cell;
+
+//use uefi::table::boot::*;
+
 use crate::bitmap::*;
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
-use crate::common::naughty::*;
+//use crate::common::kernel_statics::*;
+use crate::structures::tree::red_black::*;
 
-use core::ops::Range;
-use core::ptr;
-
-use uefi::table::boot::*;
-
-// CONSTANTS
-
-// STATICS
-
-// THE REST
-
-// NOTE ON ALLOCATORS AND BITMAP USAGE --
-// The bitmap used to track allocations operates opposite a normal bitmap;
-// a 1 indicates a free page, and a 0 indicates an allocated page.
-// This is done to be able to use special CPU instructions to search the
-// bitmap.  So the language of set*() and clear*() is reversed from normal.
-
-pub struct FrameAllocator {
-    bitmap: Bitmap,
-    buffer: *mut [u8; 2 * MEMORY_DEFAULT_PAGE_USIZE],
-    buffer_allocated: bool,
+#[repr(C)]
+pub struct MemNode {
+    key: Cell<u128>,
+    value: Cell<usize>,
+    ptr: Cell<*mut MemRegionDescr>,
+    left: Cell<*mut MemNode>,
+    right: Cell<*mut MemNode>,
+    color: Cell<bool>,
+    n: Cell<u128>,
+    idx: Cell<usize>,
 }
 
-impl FrameAllocator {
+impl RBNode for MemNode {
+    fn new() -> Self {
+        MemNode {
+            key: Cell::new(ZERO_U128),
+            value: Cell::new(ZERO_USIZE),
+            ptr: Cell::new(core::ptr::null_mut()),
+            left: Cell::new(core::ptr::null_mut()),
+            right: Cell::new(core::ptr::null_mut()),
+            color: Cell::new(false),
+            n: Cell::new(ZERO_U128),
+            idx: Cell::new(ZERO_USIZE),
+        }
+    }
+
+    fn key(&self) -> u128 {
+        self.key.get()
+    }
+
+    fn set_key(&self, key: u128) {
+        self.key.set(key);
+    }
+
+    fn value(&self) -> usize {
+        self.value.get()
+    }
+
+    fn set_value(&self, value: usize) {
+        self.value.set(value);
+    }
+
+    fn ptr(&self) -> *mut () {
+        self.ptr.get() as *mut ()
+    }
+
+    fn set_ptr(&self, ptr: *mut ()) {
+        self.ptr.set(ptr as *mut MemRegionDescr);
+    }
+
+    fn left(&self) -> *mut Self {
+        self.left.get()
+    }
+    
+    fn set_left(&self, left: *mut Self) {
+        self.left.set(left);
+    }
+
+        fn right(&self) -> *mut Self {
+        self.right.get()
+    }
+
+    #[allow(refining_impl_trait)]
+    fn set_right(&self, right: *mut Self) {
+        self.right.set(right);
+    }
+
+    fn color(&self) -> bool {
+        self.color.get()
+    }
+
+    fn set_color(&self, color: bool) {
+        self.color.set(color);
+    }
+
+    fn n(&self) -> u128 {
+        self.n.get()
+    }
+
+    fn set_n(&self, n: u128) {
+        self.n.set(n);
+    }
+
+    fn idx(&self) -> usize {
+        self.idx.get()
+    }
+
+    fn set_idx(&self, idx: usize) {
+        self.idx.set(idx);
+    }
+}
+
+#[repr(C)]
+pub struct MemRegionDescr {
+    pub start_addr: Cell<usize>,            // Starting address of the memory frame
+    pub size: Cell<usize>,                  // Size of the memory frame in bytes
+    pub is_free: Cell<bool>,                // Is the frame free?
+    pub flags: Cell<usize>,                 // Flags for the frame
+    pub owner: Cell<Owner>,                 // Owner of the frame
+    pub idx: Cell<usize>,                   // Index of this region in the bitmap
+    pub size_node: Cell<MemNode>,           // Node for the size tree
+    pub addr_node: Cell<MemNode>,           // Node for the address tree
+}
+
+pub const MEM_REGION_DESCR_PER_SMALL_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / core::mem::size_of::<MemRegionDescr>();
+
+impl MemRegionDescr {
     pub fn new() -> Self {
-        Self {
-            bitmap: Bitmap::new(),
-            buffer: ptr::null_mut(),
-            buffer_allocated: false,
+        MemRegionDescr {
+            start_addr: Cell::new(ZERO_USIZE),
+            size: Cell::new(ZERO_USIZE),
+            is_free: Cell::new(false),
+            flags: Cell::new(ZERO_USIZE),
+            owner: Cell::new(Owner::Nobody),
+            idx: Cell::new(ZERO_USIZE),
+            size_node: Cell::new(MemNode::new()),
+            addr_node: Cell::new(MemNode::new()),
         }
     }
 
-    pub fn dealloc_buffer(&mut self) {
-        match self.buffer_allocated {
-            true => {
-                let buf_phys =
-                    ptr_mut_to_addr::<[u8; 2 * MEMORY_DEFAULT_PAGE_USIZE], PhysAddr>(self.buffer);
-
-                // dealloc the pages
-                unsafe {
-                    KERNEL_BASE_VAS_4
-                        .lock()
-                        .as_mut()
-                        .unwrap()
-                        .base_page_table
-                        .as_mut()
-                        .unwrap()
-                        .dealloc_pages_contiguous(buf_phys.into(), USIZE_8K, PageSize::Small);
-                }
-            }
-            false => {
-                return;
-            }
-        }
-        self.buffer = ptr::null_mut();
-    }
-
-    // at this point we are still in uefi boot services mode
-    // as soon as the frame allocator is initialized, we will
-    // exit uefi boot services mode
-    pub fn init(&mut self) {
-        let mut mm: MemoryMap;
-
-        #[cfg(debug_assertions)]
-        serial_println!("allocating memory for uefi memory map");
-
-        // Allocate memory for the bitmap using UEFI allocate_pages.
-        let tst = unsafe { UEFI_SYSTEM_TABLE_0.lock().as_mut().unwrap().unsafe_clone() };
-
-        let mm_result = tst.boot_services().allocate_pages(
-            AllocateType::AnyPages,
-            MemoryType::custom(MEMORY_TYPE_UEFI_MEM_MAP), // Use the custom memory type
-            2,
-        );
-
-        match mm_result {
-            Ok(frame) => {
-                self.buffer = addr_to_ptr_mut::<[u8; 2 * MEMORY_DEFAULT_PAGE_USIZE], PhysAddr>(
-                    PhysAddr(frame as usize),
-                );
-            }
-            Err(_) => panic!("Failed to allocate temporary storage for uefi memory map"),
-        }
-
-        // Read the memory map an initial time so we know how large our bitmap needs to be
-        // to cover all of physical memory.
-        mm = unsafe {
-            UEFI_SYSTEM_TABLE_0
-                .lock()
-                .as_ref()
-                .unwrap()
-                .boot_services()
-                .memory_map(self.buffer.as_mut().unwrap())
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Physical frame allocator failed to read the UEFI memory map: {:?}",
-                        e
-                    );
-                })
-        };
-
-        // Find the highest physical address in the memory map. (CONVENTIONAL memory only)
-        let mut max_phys_present: usize = 0;
-        for e in mm.entries() {
-            #[cfg(debug_assertions)]
-            serial_println!(
-                "ty: {:?} ps: 0x{:08x} pc: {} flags: {:?}",
-                e.ty,
-                e.phys_start,
-                e.page_count,
-                e.att
-            );
-
-            if e.ty == MemoryType::CONVENTIONAL {
-                max_phys_present =
-                    e.phys_start as usize + (MEMORY_DEFAULT_PAGE_USIZE * e.page_count as usize) - 1;
-            }
-        }
-
-        #[cfg(debug_assertions)]
-        serial_println!("max conventional address: 0x{:0x}", max_phys_present);
-
-        let max_phys_usize_idx = calc_pages_reqd(max_phys_present, PageSize::Small) / MACHINE_UBITS;
-
-        #[cfg(debug_assertions)]
-        serial_println!("max physical bitmap index: 0x{:0x}", max_phys_usize_idx);
-
-        // store max phys addr in global
-        {
-            let mut max_phys = unsafe { PHYS_MEM_MAX_2.lock() };
-            *max_phys = Some(PhysAddr(max_phys_present));
-        }
-        // store max phys addr idx in global
-        {
-            let mut max_phys_idx = unsafe { PHYS_MEM_MAX_USIZE_IDX_2.lock() };
-            *max_phys_idx = Some(max_phys_usize_idx);
-        }
-
-        #[cfg(debug_assertions)]
-        serial_println!("allocating memory for physical frame allocator");
-
-        // pages req'd for bitmap = pages to cover physical memory / bits per usize
-        let pages_reqd = Bitmap::calc_size_in_pages(
-            calc_pages_reqd(max_phys_present, PageSize::Small),
-            PageSize::Small,
-        );
-
-        // Allocate memory for the bitmap using UEFI allocate_pages.
-        let result = unsafe {
-            UEFI_SYSTEM_TABLE_0
-                .lock()
-                .as_ref()
-                .unwrap()
-                .boot_services()
-                .allocate_pages(
-                    AllocateType::AnyPages,
-                    MemoryType::custom(MEMORY_TYPE_BOOT_FRAMER), // Use the custom memory type
-                    pages_reqd,
-                )
-        };
-
-        if result.is_err() {
-            panic!(
-                "failed to allocate {} pages for physical frame allocator: {:?}",
-                pages_reqd,
-                result.err().unwrap()
-            );
-        }
-
-        #[cfg(debug_assertions)]
-        serial_println!("physical frame allocator memory allocated");
-
-        #[cfg(debug_assertions)]
-        serial_println!("attaching physical frame allocator to allocated memory");
-
-        match result {
-            Ok(frame) => {
-                self.bitmap.init(
-                    (max_phys_usize_idx + 1) * MACHINE_UBITS,
-                    VirtAddr(0),
-                    VirtAddr(frame as usize),
-                );
-            }
-            Err(_) => panic!("Failed to allocate memory for physical frame allocator"),
-        }
-
-        #[cfg(debug_assertions)]
-        serial_println!("terminating uefi services");
-
-        // exit uefi
-        (_, mm) = unsafe {
-            UEFI_SYSTEM_TABLE_0
-                .lock()
-                .as_ref()
-                .unwrap()
-                .unsafe_clone()
-                .exit_boot_services(MemoryType::custom(MEMORY_TYPE_UEFI_MEM_MAP))
-        };
-
-        // store memory map in global
-        let mut map = unsafe { UEFI_MEMORY_MAP_1.lock() };
-        *map = Some(mm);
-
-        #[cfg(debug_assertions)]
-        serial_println!("uefi services terminated");
-
-        #[cfg(debug_assertions)]
-        serial_println!("clearing frame allocator memory");
-
-        // clear the bitmap (set all memory to allocated)
-        self.bitmap.clear_all();
-
-        #[cfg(debug_assertions)]
-        serial_println!("configuring frame allocator for installed memory & peripherals");
-
-        // Initialize the bitmap based on the UEFI memory map.
-        for descriptor in (*map).as_ref().unwrap().entries() {
-            if descriptor.ty == MemoryType::CONVENTIONAL {
-                let start_page = descriptor.phys_start as usize / MEMORY_DEFAULT_PAGE_USIZE;
-                let end_page = start_page + descriptor.page_count as usize;
-
-                self.bitmap.set_range(start_page, end_page);
-            }
-        }
-    }
-
-    pub fn alloc_page(&mut self) -> Option<PhysAddr> {
-        // Find an available page in the bitmap.
-        let first_frame = self.bitmap.find_first_set();
-
-        match first_frame {
-            Some(frame) => {
-                // Mark the page as allocated in the bitmap.
-                self.bitmap.clear(frame);
-
-                Some(PhysAddr(frame * MEMORY_DEFAULT_PAGE_USIZE))
-            }
-            None => None,
-        }
-    }
-
-    pub fn dealloc_page(&mut self, page_base: PhysAddr) {
-        self.bitmap
-            .set(page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE);
-    }
-
-    pub fn free_page_count(&self) -> usize {
-        self.bitmap.bit_set_count()
-    }
-
-    pub fn alloc_contiguous(&mut self, size: usize) -> Option<PhysAddr> {
-        let page_count = calc_pages_reqd(size, PageSize::Small);
-        let frame_base = self.bitmap.find_first_set_region(page_count);
-
-        match frame_base {
-            Some(frame) => {
-                // Mark the page as allocated in the bitmap.
-                self.bitmap.clear_range(frame, frame + page_count);
-
-                Some(PhysAddr(frame * MEMORY_DEFAULT_PAGE_USIZE))
-            }
-            None => None,
-        }
-    }
-
-    pub fn alloc_contiguous_page_aligned(
-        &mut self,
+    pub fn new_with(
+        start_address: usize,
         size: usize,
-        page_size: PageSize,
-    ) -> Option<PhysAddr> {
-        let mut current_page_idx = 0usize;
-        let reqd_page_count = calc_pages_reqd(size, PageSize::Small);
-        let max_phys_idx = unsafe { PHYS_MEM_MAX_USIZE_IDX_2.lock().as_ref().unwrap().clone() };
-
-        while current_page_idx <= max_phys_idx {
-            let try_alloc_page = self.bitmap.find_set_region_in_range(
-                current_page_idx,
-                reqd_page_count,
-                Range {
-                    start: current_page_idx,
-                    end: current_page_idx,
-                },
-            );
-
-            if try_alloc_page.is_some() {
-                // allocate
-                self.bitmap
-                    .clear_range(current_page_idx, try_alloc_page.unwrap());
-                return Some(PhysAddr(
-                    try_alloc_page.unwrap() * MEMORY_DEFAULT_PAGE_USIZE,
-                ));
-            }
-
-            // no dice this time, so increment the current_page_idx to the next
-            // idx that is page_size page aligned
-            current_page_idx += page_size.into_bits() / MEMORY_DEFAULT_PAGE_USIZE;
+        is_free: bool,
+        flags: usize,
+        owner: Owner,
+    ) -> Self {
+        MemRegionDescr {
+            start_addr: Cell::new(start_address),
+            size: Cell::new(size),
+            is_free: Cell::new(is_free),
+            flags: Cell::new(flags),
+            owner: Cell::new(owner),
+            idx: Cell::new(ZERO_USIZE),
+            size_node: Cell::new(MemNode::new()),
+            addr_node: Cell::new(MemNode::new()),
         }
-        None
     }
 
-    pub fn dealloc_contiguous(&mut self, page_base: PhysAddr, size: usize) {
-        let page_count = calc_pages_reqd(size, PageSize::Small);
-        let start_idx = page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE;
-        self.bitmap.set_range(start_idx, start_idx + page_count);
+    pub fn size_node_ptr(&self) -> &mut MemNode {
+        self.size_node.get_mut()
     }
 
-    pub fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool {
-        self.bitmap
-            .is_set(page_base.as_usize() / MEMORY_DEFAULT_PAGE_USIZE)
+    pub fn addr_node_ptr(&self) -> &mut MemNode {
+        self.addr_node.get_mut()
+    }
+}
+
+#[allow(dead_code)]
+pub struct TreeAllocator {
+    // The base address 
+    phys_base: Cell<PhysAddr>,
+
+    count: Cell<usize>,
+    capacity: Cell<usize>,
+
+    rb_size_free: Cell<RBTree<MemNode>>,
+    rb_addr_free: Cell<RBTree<MemNode>>,
+    rb_size_alloc: Cell<RBTree<MemNode>>,
+    rb_addr_alloc: Cell<RBTree<MemNode>>,
+
+    merge_free_dealloc_count: Cell<usize>,
+    pub merge_free_dealloc_interval: Cell<usize>,
+
+    bitmap: *mut Bitmap,
+}
+
+impl TreeAllocator {
+    
+    // Add a new region to the tree
+    pub fn add_region(&self, start_addr: PhysAddr, size: usize, is_free: bool, flags: usize, owner: Owner) -> bool {
+        let region_slot = self.alloc_new_slot_mut();
+        match region_slot {
+            Some((region_ptr, idx)) => {
+                unsafe {
+                    (*region_ptr).start_addr.set(start_addr.as_usize());
+                    (*region_ptr).size.set(size);
+                    (*region_ptr).is_free.set(is_free);
+                    (*region_ptr).flags.set(flags);
+                    (*region_ptr).owner.set(owner);
+                    (*region_ptr).idx.set(idx);
+
+                    let size_node = (*region_ptr).size_node_ptr();
+                    size_node.set_value(idx);
+                    size_node.set_key(make128(size, start_addr.as_usize()));
+                    size_node.set_ptr(region_ptr as *mut ());
+
+                    let addr_node = (*region_ptr).addr_node_ptr();
+                    addr_node.set_value(idx);
+                    addr_node.set_key(start_addr.as_usize() as u128);
+                    addr_node.set_ptr(region_ptr as *mut ());
+
+                    if is_free {
+                        self.rb_size_free.get_mut().put(size_node);
+                        self.rb_addr_free.get_mut().put(addr_node);
+                    } else {
+                        self.rb_size_alloc.get_mut().put(size_node);
+                        self.rb_addr_alloc.get_mut().put(addr_node);
+                    }
+                }
+                
+                self.count.set(self.count.get() + 1);
+
+                true
+            }
+            None => false,
+        }
     }
 
-    pub fn is_frame_index_free(&self, page_idx: usize) -> bool {
-        self.bitmap.is_set(page_idx)
+    // completely remove a region from the tree
+    pub fn remove_region(&self, node: *mut MemNode) {
+        let region_idx = unsafe { (*node).idx() };
+        let regions = self.mem_region_array();
+
+        unsafe {
+            if regions[region_idx].is_free.get() {
+                self.rb_size_free.get_mut().delete((*node).key());
+                self.rb_addr_free.get_mut().delete((*node).key());
+            } else {
+                self.rb_size_alloc.get_mut().delete((*node).key());
+                self.rb_addr_alloc.get_mut().delete((*node).key());
+            }
+        }
+
+        self.dealloc_slot_by_idx(region_idx);
+
+        self.count.set(self.count.get() - 1);
+    }
+    
+    // get access to the memory region array
+    fn mem_region_array(&self) -> &'static mut [MemRegionDescr] {
+        unsafe { 
+            core::slice::from_raw_parts_mut(
+                raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(self.phys_base.get()), 
+                self.capacity.get()) }
+    }
+
+    // Alloc before doing anything else
+    fn alloc_new_slot_mut(&self) -> Option<(*mut MemRegionDescr, usize)> {
+        let new_struct_slot = unsafe { (*self.bitmap).find_first_set() };
+        
+        match new_struct_slot {
+            Some(slot) => {
+                let mut new_struct_addr = self.phys_base.get().clone();
+                new_struct_addr.inner_inc_by_type::<MemRegionDescr>(slot);
+
+                let new_struct_ptr = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(new_struct_addr);
+                unsafe { (*self.bitmap).clear(slot); }
+                Some((new_struct_ptr, slot))
+            }
+            None => None,
+        }
+    }
+
+    // Dealloc after doing everything else
+    fn dealloc_slot_by_ptr(&self, ptr: *mut MemNode) {
+        let ptr_bitmap_slot = (raw::ptr_to_usize::<MemRegionDescr>(ptr as *const MemRegionDescr) - self.phys_base.get().as_usize()) / core::mem::size_of::<MemRegionDescr>();
+        unsafe { ptr.write_bytes(ZERO_U8, core::mem::size_of::<MemRegionDescr>()); }
+        unsafe { (*self.bitmap).set(ptr_bitmap_slot); }
+    }
+
+    fn dealloc_slot_by_idx(&self, idx: usize) {
+        let mut ptr_mem_region = self.phys_base.get().clone();
+        ptr_mem_region.inner_inc_by_type::<MemRegionDescr>(idx);
+
+        let ptr = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(ptr_mem_region);
+        unsafe { ptr.write_bytes(ZERO_U8, core::mem::size_of::<MemRegionDescr>()); }
+        unsafe { (*self.bitmap).set(idx); }
+    }
+
+    // find the region that wastes the least amount of space for the specified size
+    // if there's any more space than MEMORY_MAX_WASTE, split the region
+    pub fn alloc(&self, size: usize, owner: Owner) -> Option<*mut MemRegionDescr> {
+        let new_block = self.rb_size_free
+            .get_mut()
+            .ceiling_node(
+                make128(size, 0));
+
+        match new_block {
+            Some(block) => {
+                let block_idx = unsafe { (*block).idx.get() };
+                let mem_regions = self.mem_region_array();
+
+                let block_size = mem_regions[block_idx].size.get();
+                let block_start_addr = mem_regions[block_idx].start_addr.get();
+
+                // see if the block is large enough to split
+                if block_size - size > MEMORY_MAX_WASTE {
+                    // split the block
+                    let (old_node, new_node) = 
+                        self.split_region(unsafe { (*block).ptr.get() }, size, owner).unwrap();
+
+                    return Some(old_node);
+                } else {
+                    return unsafe { Some((*block).ptr.get()) };
+                }
+            },
+            None => return None,
+        }
+    }
+
+    // split a region into two regions
+    // returns the old region and the new region
+    // the old region is the region that was split into new_size,
+    // and the new region is the region that was created from the split
+    pub fn split_region(&self, region: *mut MemRegionDescr, new_size: usize, owner: Owner) -> Option<(*mut MemRegionDescr, *mut MemRegionDescr)> {
+        let region_idx = unsafe { (*region).idx.get() };
+        let mem_regions = self.mem_region_array();
+
+        let region_size = mem_regions[region_idx].size.get();
+        let region_start_addr = mem_regions[region_idx].start_addr.get();
+
+        // see if the block is large enough to split
+        if region_size - new_size > MEMORY_MAX_WASTE {
+            // split the block
+            let new_region = self.alloc_new_slot_mut();
+            match new_region {
+                Some((new_region_ptr, new_region_idx)) => {
+                    // update the old region
+                    unsafe {
+                        // remove the old region from each tree
+                        let size_node = (*region).size_node_ptr();
+                        let addr_node = (*region).addr_node_ptr();
+
+                        self.rb_size_free.get_mut().delete(size_node.key());
+                        self.rb_addr_free.get_mut().delete(addr_node.key());
+                        
+                        // update the old region
+                        (*region).size.set(new_size);
+                        (*region).is_free.set(false);
+                        (*region).owner.set(owner);
+                        (*region).idx.set(region_idx);
+                        
+                        size_node.set_value(region_idx);
+                        size_node.set_key(make128(new_size, region_start_addr));
+                        
+                        addr_node.set_value(region_idx);
+                        addr_node.set_key(region_start_addr as u128);
+
+                        // add the old region back to the tree with its new info
+                        self.rb_size_alloc.get_mut().put(size_node);
+                        self.rb_addr_alloc.get_mut().put(addr_node);
+                    }
+
+                    // update the new region
+                    unsafe {
+                        (*new_region_ptr).start_addr.set(region_start_addr + new_size);
+                        (*new_region_ptr).size.set(region_size - new_size);
+                        (*new_region_ptr).is_free.set(true);
+                        (*new_region_ptr).owner.set(Owner::Nobody);
+                        (*new_region_ptr).idx.set(new_region_idx);
+
+                        let size_node = (*new_region_ptr).size_node_ptr();
+                        size_node.value.set(new_region_idx);
+                        size_node.key.set(make128(region_size - new_size, region_start_addr + new_size));
+
+                        let addr_node = (*new_region_ptr).addr_node_ptr();
+                        addr_node.value.set(new_region_idx);
+                        addr_node.key.set((region_start_addr + new_size) as u128);
+
+                        self.rb_size_free.get_mut().put(size_node);
+                        self.rb_addr_free.get_mut().put(addr_node);
+                    }
+
+                    self.count.set(self.count.get() + 1);
+
+                    Some((region, new_region_ptr))
+                }
+                None => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    // mark a region as allocated
+    pub fn mark_allocated(&self, region: *mut MemRegionDescr, owner: Owner) {
+        let region_idx = unsafe { (*region).idx.get() };
+        let mem_regions = self.mem_region_array();
+
+        // see if the region is already allocated
+        // if it is, then we don't need to do anything
+        if mem_regions[region_idx].is_free.get() == false {
+            return;
+        }
+
+        let region_size = mem_regions[region_idx].size.get();
+        let region_start_addr = mem_regions[region_idx].start_addr.get();
+
+        unsafe {
+            (*region).is_free.set(false);
+            (*region).owner.set(owner);
+
+            // always remove the region from the trees before making
+            // any changes to the region's keys, otherwise the rb tree
+            // will be corrupted
+            let size_node = (*region).size_node_ptr();
+            let addr_node = (*region).addr_node_ptr();
+
+            self.rb_size_free.get_mut().delete(size_node.key.get());
+            self.rb_addr_free.get_mut().delete(addr_node.key.get());
+            
+            // update region keys / values
+            size_node.value.set(region_idx);
+            size_node.key.set(make128(region_size, region_start_addr));
+            
+            addr_node.value.set(region_idx);
+            addr_node.key.set(region_start_addr as u128);
+
+            // add the region to the alloc tree with its new info
+            self.rb_size_alloc.get_mut().put(size_node);
+            self.rb_addr_alloc.get_mut().put(addr_node);
+        }
+    }
+
+    // mark a region as free
+    pub fn mark_free(&self, region: *mut MemRegionDescr) {
+        let region_idx = unsafe { (*region).idx.get() };
+        let mem_regions = self.mem_region_array();
+
+        // see if the region is already allocated
+        // if it's free, then we don't need to do anything
+        if mem_regions[region_idx].is_free.get() == true {
+            return;
+        }
+
+        let region_size = mem_regions[region_idx].size.get();
+        let region_start_addr = mem_regions[region_idx].start_addr.get();
+
+        unsafe {
+            (*region).is_free.set(true);
+            (*region).owner.set(Owner::Nobody);
+
+            // always remove the region from the trees before making
+            // any changes to the region's keys, otherwise the rb tree
+            // will be corrupted
+            let size_node = (*region).size_node_ptr();
+            let addr_node = (*region).addr_node_ptr();
+
+            self.rb_size_alloc.get_mut().delete(size_node.key.get());
+            self.rb_addr_alloc.get_mut().delete(addr_node.key.get());
+            
+            // update region keys / values
+            size_node.value.set(region_idx);
+            size_node.key.set(make128(region_size, region_start_addr));
+            
+            addr_node.value.set(region_idx);
+            addr_node.key.set(region_start_addr as u128);
+
+            // add the region to the free tree with its new info
+            self.rb_size_free.get_mut().put(size_node);
+            self.rb_addr_free.get_mut().put(addr_node);
+        }
+    }
+
+    // find the first region that is aligned to the specified alignment
+    pub fn find_page_aligned(&self, size: usize, owner: Owner, page_size: PageSize) -> Option<*mut MemRegionDescr> {
+        
+    }
+}
+
+impl FrameAllocator for TreeAllocator {
+    fn new() -> Self {
+        TreeAllocator {
+            phys_base: Cell::new(PhysAddr(0)),
+            count: Cell::new(0),
+            capacity: Cell::new(0),
+
+            rb_size_free: Cell::new(RBTree::<MemNode>::new()),
+            rb_addr_free: Cell::new(RBTree::<MemNode>::new()),
+            rb_size_alloc: Cell::new(RBTree::<MemNode>::new()),
+            rb_addr_alloc: Cell::new(RBTree::<MemNode>::new()),
+
+            merge_free_dealloc_count: Cell::new(0),
+            merge_free_dealloc_interval: Cell::new(FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC),
+
+            bitmap: iron().region_bitmap,
+        }
+    }
+
+    fn init(&self) {
+        let gb = iron();
+
+        self.phys_base.set(raw::ptr_to_raw::<MemRegionDescr, PhysAddr>(gb.mem_regions as *const MemRegionDescr));
+        self.capacity.set(gb.total_pages);
+    }
+
+    // Allocates a single page of memory of the specified size (at the proper alignment)
+    fn alloc_page(&self, owner: Owner, page_size: PageSize) -> Option<PhysAddr> {
+        let new_alloc = self.find_page_aligned(page_size.into_bits(), owner, page_size);
+
+        match new_alloc {
+            Some(region) => {
+                self.mark_allocated(region, owner);
+                let frame_base_addr = unsafe { (*region).start_addr.get() };
+                Some(PhysAddr(frame_base_addr))
+            }
+            None => None,
+        }
+    }
+
+    // Deallocates a single page of memory of the specified size
+    // page_base is the base address of the page to deallocate, not
+    // the base address of the region that contains the page
+    fn dealloc_page(&self, page_base: PhysAddr, owner: Owner, page_size: PageSize) {
+        
+    }
+
+    fn free_page_count(&self) -> usize {
+        
+    }
+
+    fn free_mem_count(&self) -> usize {
+        
+    }
+
+    fn page_count(&self) -> usize {
+        
+    }
+
+    fn mem_count(&self) -> usize {
+        
+    }
+
+    fn alloc_contiguous(&self, size: usize, owner: Owner) -> Option<PhysAddr> {
+        
+    }
+
+    fn dealloc_contiguous(&self, page_base: PhysAddr, size: usize, owner: Owner) {
+        
+    }
+
+    fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool {
+        
+    }
+
+    fn is_frame_index_free(&self, page_idx: usize) -> bool {
+        
     }
 }

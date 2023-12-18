@@ -1,6 +1,5 @@
 use crate::common::base::*;
 use crate::common::kernel_statics::*;
-use crate::common::naughty::*;
 
 use core::cell::Cell;
 use core::ops::Range;
@@ -95,7 +94,7 @@ impl Drop for Bitmap {
                     .as_mut()
                     .unwrap()
                     .dealloc_pages_contiguous(
-                        ptr_to_addr::<usize, VirtAddr>(self.bitmap.get() as *const usize),
+                        raw::ptr_to_raw::<usize, VirtAddr>(self.bitmap.get() as *const usize),
                         self.size_in_pages.get(),
                         PageSize::Small,
                     );
@@ -125,7 +124,7 @@ impl BitmapOps for Bitmap {
 
         // calculate the size in bytes and pages
         let size_in_bytes = size_in_usize * MACHINE_UBYTES;
-        let size_in_pages = calc_pages_reqd(size_in_bytes, PageSize::Small);
+        let size_in_pages = pages::calc_pages_reqd(size_in_bytes, PageSize::Small);
 
         // if the pre-allocated base is 0, that means we need to allocate directly from the
         // frame allocator; if it's not 0, then the memory has already been allocated for us
@@ -140,7 +139,7 @@ impl BitmapOps for Bitmap {
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_contiguous(size_in_bytes)
+                    .alloc_contiguous(size_in_bytes, Owner::System)
             };
 
             if bitmap_phys_base.is_some() {
@@ -162,7 +161,7 @@ impl BitmapOps for Bitmap {
                                 PhysAddr(i),
                                 virt_base,
                                 PageSize::Small,
-                                PAGING_PRESENT | PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                                PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                             );
                     }
                     virt_base.inner_inc_by_page_size(PageSize::Small);
@@ -173,7 +172,7 @@ impl BitmapOps for Bitmap {
 
                 for _i in 0..size_in_pages {
                     let page_base =
-                        unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page() };
+                        unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().alloc_page(Owner::System, PageSize::Small) };
                     if page_base.is_some() {
                         allocated_pages += 1;
 
@@ -189,7 +188,7 @@ impl BitmapOps for Bitmap {
                                     page_base.unwrap(),
                                     virt_base,
                                     PageSize::Small,
-                                    PAGING_PRESENT | PAGING_WRITABLE | PAGING_WRITETHROUGH,
+                                    PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                                 );
                         }
                         virt_base.inner_inc_by_page_size(PageSize::Small);
@@ -222,7 +221,7 @@ impl BitmapOps for Bitmap {
                                     .lock()
                                     .as_mut()
                                     .unwrap()
-                                    .dealloc_page(phys_page);
+                                    .dealloc_page(phys_page, Owner::System, PageSize::Small);
                             }
                             virt_base.inner_inc_by_page_size(PageSize::Small);
                         }
@@ -230,11 +229,11 @@ impl BitmapOps for Bitmap {
                     }
                 }
             }
-            self.bitmap.set(addr_to_ptr_mut::<usize, VirtAddr>(
+            self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
                 bitmap_phys_base.unwrap().into(),
             ));
         } else {
-            self.bitmap.set(addr_to_ptr_mut::<usize, VirtAddr>(
+            self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
                 pre_allocated_base.into(),
             ));
         }
@@ -401,7 +400,7 @@ impl BitmapOps for Bitmap {
             }
         }
         self.units_free
-            .set(self.units_free.get() - (end_item - start_item) + 1);
+            .set(self.units_free.get() + (end_item - start_item) + 1);
     }
 
     fn clear_range(&self, start_item: usize, end_item: usize) {
@@ -448,7 +447,7 @@ impl BitmapOps for Bitmap {
             }
         }
         self.units_free
-            .set(self.units_free.get() + (end_item - start_item) + 1);
+            .set(self.units_free.get() - (end_item - start_item) + 1);
     }
 
     fn set_all(&self) {

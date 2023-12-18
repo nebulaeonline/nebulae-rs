@@ -12,7 +12,7 @@ use baselib::common::base::*;
 use baselib::common::kernel_statics::*;
 use baselib::common::naughty::*;
 use baselib::cpu::*;
-use baselib::frame_alloc::FrameAllocator;
+use baselib::frame_alloc::TreeAllocator;
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 use baselib::interrupts::*;
@@ -53,7 +53,7 @@ fn uefi_start(_image_handler: uefi::Handle, mut system_table: SystemTable<Boot>)
         let _frame_allock_lock = unsafe { USING_FRAME_ALLOCATOR_6.lock() };
 
         let mut frame_alloc = unsafe { FRAME_ALLOCATOR_3.lock() };
-        *frame_alloc = Some(FrameAllocator::new());
+        *frame_alloc = Some(TreeAllocator::new());
         (*frame_alloc).as_mut().unwrap().init();
     }
 
@@ -72,8 +72,23 @@ fn kernel_main() -> () {
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     exceptions_init();
 
+    // get some info on our bsp
+    
+    // see how many free pages we have after bootstrapping the memory manager
+    {
+        // USING_FRAME_ALLOCATOR_6 is not required here because this is a non-mutable reference executed
+        // as a single statement
+        let free_pages = unsafe { FRAME_ALLOCATOR_3.lock().as_ref().unwrap().free_page_count() };
+        serial_println!(
+            "Free pages: {} / {} KB",
+            free_pages,
+            free_pages << UFACTOR_OF_4K
+        );
+    }
+
     // initialize the kernel's virtual address space
     {
+        serial_println!("Initializing kernel VAS");
         let mut kernel_vas = unsafe { KERNEL_BASE_VAS_4.lock() };
         *kernel_vas = Some(Vas::new());
         (*kernel_vas).as_mut().unwrap().base_page_table =
@@ -82,21 +97,14 @@ fn kernel_main() -> () {
             .as_mut()
             .unwrap()
             .identity_map_based_on_memory_map();
+
+        serial_println!("Memory map identity mapped");
+
         _ = (*kernel_vas).as_mut().unwrap().init_cr3();
         (*kernel_vas).as_mut().unwrap().switch_to();
+        
         #[cfg(debug_assertions)]
         serial_println!("Kernel VAS initialized");
-    }
-
-    // see how many free pages we have after bootstrapping the memory manager
-    {
-        // USING_FRAME_ALLOCATOR_6 is not required here because this is a non-mutable reference
-        let free_pages = unsafe { FRAME_ALLOCATOR_3.lock().as_ref().unwrap().free_page_count() };
-        serial_println!(
-            "Free pages: {} / {} KB",
-            free_pages,
-            free_pages << UFACTOR_OF_4K
-        );
     }
 
     // halt
