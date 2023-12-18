@@ -1,5 +1,5 @@
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
+use crate::kernel_statics::*;
 
 use core::cell::Cell;
 use core::ops::Range;

@@ -4,7 +4,6 @@ use core::cell::Cell;
 
 use crate::bitmap::*;
 use crate::common::base::*;
-//use crate::common::kernel_statics::*;
 use crate::structures::tree::red_black::*;
 
 #[repr(C)]
@@ -110,8 +109,6 @@ pub struct MemRegionDescr {
     pub size_node: Cell<MemNode>,           // Node for the size tree
     pub addr_node: Cell<MemNode>,           // Node for the address tree
 }
-
-pub const MEM_REGION_DESCR_PER_SMALL_PAGE: usize = MEMORY_DEFAULT_PAGE_USIZE / core::mem::size_of::<MemRegionDescr>();
 
 impl MemRegionDescr {
     pub fn new() -> Self {

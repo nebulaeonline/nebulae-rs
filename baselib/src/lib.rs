@@ -10,6 +10,7 @@
 // #![feature(generic_const_exprs)]
 
 // baselib mods
+pub mod kernel_statics;
 pub mod genesis;
 pub mod structures;
 pub mod bitmap;

@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
+use crate::kernel_statics::*;
 use crate::bitmap::*;
 
 #[repr(C)]

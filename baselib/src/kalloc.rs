@@ -1,6 +1,6 @@
 use crate::bitmap::*;
 use crate::common::base::*;
-use crate::common::kernel_statics::*;
+use crate::kernel_statics::*;
 
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;
