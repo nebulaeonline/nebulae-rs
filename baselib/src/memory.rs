@@ -1,6 +1,7 @@
 use crate::common::base::*;
 pub use crate::frame_alloc::*;
 
+use core::slice;
 use core::convert::{From, Into};
 use core::mem;
 
@@ -657,6 +658,18 @@ pub mod raw {
         unsafe {
             core::ptr::write_volatile(ptr, core::mem::zeroed());
         }
+        ptr
+    }
+
+    // our function to make an array appear at a specific address with 
+    // completely zeroed memory
+    #[inline(always)]
+    pub fn abracadabra_array<T>(addr: impl MemAddr + AsUsize, count: usize) -> *mut [T] {
+        let addr = addr.as_usize();
+        let ptr = unsafe { slice::from_raw_parts_mut::<T>(addr as *mut T, count) };
+        
+        // zero the slice
+        raw::memset_size(PhysAddr::from(addr), count * mem::size_of::<T>(), 0);
         ptr
     }
 

@@ -3,7 +3,6 @@ use crate::kernel_statics::*;
 
 use core::cell::Cell;
 use core::ops::Range;
-use core::ptr;
 use core::slice;
 
 pub trait BitmapOps {
@@ -84,7 +83,7 @@ pub enum BitmapTyp {
 }
 
 pub struct Bitmap {
-    bitmap: Cell<*mut usize>,
+    bitmap: Cell<Option<*mut usize>>,
     capacity_in_units: Cell<usize>,
     units_free: Cell<usize>,
     size_in_usize: Cell<usize>,
@@ -98,13 +97,13 @@ impl Drop for Bitmap {
         #[cfg(debug_assertions)]
         serial_println!(
             "bitmap::drop(): bitmap: 0x{:016x}, typ: {:?}",
-            self.bitmap.get() as usize,
+            self.bitmap.get().unwrap() as usize,
             self.typ.get()
         );
 
         // if our bitmap is not null, then we need to free the memory
         // associated with the bitmap or else we will leak memory
-        if self.bitmap.get() != ptr::null_mut() && *self.typ.get_mut() != BitmapTyp::PhysFixed {
+        if self.bitmap.get().is_some() && *self.typ.get_mut() != BitmapTyp::PhysFixed {
             // we no longer have to worry about the frame allocator,
             // as all of its functions are now handled by vmem
             unsafe {
@@ -116,13 +115,13 @@ impl Drop for Bitmap {
                     .as_mut()
                     .unwrap()
                     .dealloc_pages_contiguous(
-                        raw::ptr_to_raw::<usize, VirtAddr>(self.bitmap.get() as *const usize),
+                        raw::ptr_to_raw::<usize, VirtAddr>(self.bitmap.get().unwrap() as *const usize),
                         self.size_in_pages.get(),
                         self.owner.get(),
                         PageSize::Small,
                     );
             }
-            self.bitmap.set(ptr::null_mut());
+            self.bitmap.set(None);
         }
     }
 }
@@ -133,7 +132,7 @@ impl BitmapOps for Bitmap {
         serial_println!("bitmap::new(): owner: {:?}", owner);
         
         Bitmap {
-            bitmap: Cell::new(ptr::null_mut()),
+            bitmap: Cell::new(None),
             capacity_in_units: Cell::new(0),
             units_free: Cell::new(0),
             size_in_usize: Cell::new(0),
@@ -174,7 +173,7 @@ impl BitmapOps for Bitmap {
 
         // set our raw pointer to the base address
         self.bitmap
-            .set(raw::raw_to_ptr_mut::<usize, PhysAddr>(base_addr.into()));
+            .set(Some(raw::abracadabra::<usize>(base_addr)));
 
         true
     }
@@ -192,7 +191,7 @@ impl BitmapOps for Bitmap {
         let size_in_pages = pages::calc_pages_reqd(size_in_bytes, PageSize::Small);
 
         // we will first try to get contiguous memory for the bitmap.
-        let bitmap_phys_base = unsafe {
+        let bitmap_phys_alloc = unsafe {
             FRAME_ALLOCATOR_3
                 .lock()
                 .as_mut()
@@ -200,11 +199,11 @@ impl BitmapOps for Bitmap {
                 .alloc_default_pages(size_in_bytes, Owner::System)
         };
 
-        if bitmap_phys_base.is_some() {
+        if bitmap_phys_alloc.is_some() {
             // we were able to successfully allocate contiguous memory for the bitmap
             // now map the pages used for the bitmap
-            for i in (bitmap_phys_base.unwrap().as_usize()
-                ..(bitmap_phys_base.unwrap().as_usize() + size_in_bytes))
+            for i in (bitmap_phys_alloc.unwrap().as_usize()
+                ..(bitmap_phys_alloc.unwrap().as_usize() + size_in_bytes))
                 .step_by(MEMORY_DEFAULT_PAGE_USIZE)
             {
                 unsafe {
@@ -235,9 +234,8 @@ impl BitmapOps for Bitmap {
         self.size_in_pages.set(size_in_pages);
         self.size_in_bytes.set(size_in_bytes);
 
-        self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
-            bitmap_phys_base.unwrap().into(),
-        ));
+        let bitmap_phys_base = PhysAddr(bitmap_phys_alloc.unwrap().as_usize());
+        self.bitmap.set(Some(raw::abracadabra::<usize>(bitmap_phys_base)));
 
         true
     }
@@ -260,7 +258,7 @@ impl BitmapOps for Bitmap {
 
         // we will first try to get contiguous memory for the bitmap. if that fails, we will
         // fall back to allocating pages individually
-        let bitmap_phys_base = unsafe {
+        let bitmap_phys_alloc = unsafe {
             FRAME_ALLOCATOR_3
                 .lock()
                 .as_mut()
@@ -268,11 +266,11 @@ impl BitmapOps for Bitmap {
                 .alloc_default_pages(size_in_bytes, Owner::System)
         };
 
-        if bitmap_phys_base.is_some() {
+        if bitmap_phys_alloc.is_some() {
             // we were able to successfully allocate contiguous memory for the bitmap
             // now map the pages used for the bitmap
-            for i in (bitmap_phys_base.unwrap().as_usize()
-                ..(bitmap_phys_base.unwrap().as_usize() + size_in_bytes))
+            for i in (bitmap_phys_alloc.unwrap().as_usize()
+                ..(bitmap_phys_alloc.unwrap().as_usize() + size_in_bytes))
                 .step_by(MEMORY_DEFAULT_PAGE_USIZE)
             {
                 unsafe {
@@ -362,9 +360,9 @@ impl BitmapOps for Bitmap {
                 }
             }
         }
-        self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
-            bitmap_phys_base.unwrap().into(),
-        ));
+
+        let bitmap_phys_base = PhysAddr(bitmap_phys_alloc.unwrap().as_usize());
+        self.bitmap.set(Some(raw::abracadabra::<usize>(bitmap_phys_base)));
 
         self.capacity_in_units.set(item_cap);
         self.units_free.set(item_cap);
@@ -405,8 +403,9 @@ impl BitmapOps for Bitmap {
         };
 
         if raw_alloc.is_some() {
+            let bitmap_virt_base = VirtAddr(raw_alloc.unwrap().as_usize());
             self.bitmap
-                .set(raw::raw_to_ptr_mut::<usize, VirtAddr>(raw_alloc.unwrap()));
+                .set(Some(raw::abracadabra::<usize>(bitmap_virt_base)));
         } else {
             return false;
         }
@@ -439,7 +438,7 @@ impl BitmapOps for Bitmap {
 
         // set our raw pointer to the base address
         self.bitmap
-            .set(raw::raw_to_ptr_mut::<usize, VirtAddr>(base_addr.into()));
+            .set(Some(raw::abracadabra::<usize>(base_addr)));
 
         true
     }
@@ -454,38 +453,38 @@ impl BitmapOps for Bitmap {
 
     #[inline(always)]
     fn size_in_usize(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
         self.size_in_usize.get()
     }
 
     #[inline(always)]
     fn size_in_pages(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
         self.size_in_pages.get()
     }
 
     #[inline(always)]
     fn size_in_bytes(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
         self.size_in_bytes.get()
     }
 
     #[inline(always)]
     fn get_bitmap_ref_mut(&self) -> &mut [usize] {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
-        unsafe { slice::from_raw_parts_mut::<usize>(self.bitmap.get(), self.size_in_usize()) }
+        unsafe { slice::from_raw_parts_mut::<usize>(self.bitmap.get().unwrap(), self.size_in_usize()) }
     }
 
     #[inline(always)]
     fn get_bitmap_ref(&self) -> &[usize] {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
-        unsafe { slice::from_raw_parts::<usize>(self.bitmap.get(), self.size_in_usize()) }
+        unsafe { slice::from_raw_parts::<usize>(self.bitmap.get().unwrap(), self.size_in_usize()) }
     }
 
     fn set(&self, item: usize) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
@@ -495,7 +494,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn clear(&self, item: usize) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
@@ -505,7 +504,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn is_set(&self, item: usize) -> bool {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
@@ -514,31 +513,31 @@ impl BitmapOps for Bitmap {
     }
 
     fn is_clear(&self, item: usize) -> bool {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         !self.is_set(item)
     }
 
     fn capacity(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         self.capacity_in_units.get()
     }
 
     fn bit_set_count(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         self.capacity_in_units.get() - self.units_free.get()
     }
 
     fn bit_clear_count(&self) -> usize {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         self.units_free.get()
     }
 
     fn set_range(&self, start_item: usize, end_item: usize) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref_mut();
 
@@ -585,7 +584,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn clear_range(&self, start_item: usize, end_item: usize) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref_mut();
 
@@ -632,7 +631,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn set_all(&self) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let usize_idx_max = self.size_in_usize();
         let bitmap = self.get_bitmap_ref_mut();
@@ -643,7 +642,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn clear_all(&self) {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let usize_idx_max = self.size_in_usize();
         let bitmap = self.get_bitmap_ref_mut();
@@ -654,7 +653,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn is_empty(&self) -> bool {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in 0..self.size_in_usize() {
@@ -666,7 +665,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn is_full(&self) -> bool {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in 0..self.size_in_usize() {
@@ -678,7 +677,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_first_set(&self) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in 0..self.size_in_usize() {
@@ -694,7 +693,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_first_clear(&self) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in 0..self.size_in_usize() {
@@ -710,7 +709,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_next_set(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -728,7 +727,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_next_clear(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -746,7 +745,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_last_set(&self) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in (0..self.size_in_usize()).rev() {
@@ -762,7 +761,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_last_clear(&self) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         for i in (0..self.size_in_usize()).rev() {
@@ -778,7 +777,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_prev_set(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -796,7 +795,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_prev_clear(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -814,7 +813,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_first_set_region(&self, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let mut found = false;
@@ -848,7 +847,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_first_clear_region(&self, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let mut found = false;
@@ -882,7 +881,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_next_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -917,7 +916,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_next_clear_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -953,7 +952,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_last_set_region(&self, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let mut found = false;
@@ -987,7 +986,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_last_clear_region(&self, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let mut found = false;
@@ -1021,7 +1020,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_prev_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1057,7 +1056,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_prev_clear_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1093,7 +1092,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_set_from_item(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1109,7 +1108,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_clear_from_item(&self, item: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1125,7 +1124,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_set_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1159,7 +1158,7 @@ impl BitmapOps for Bitmap {
     }
 
     fn find_clear_region(&self, item: usize, reqd_item_count: usize) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
@@ -1202,7 +1201,7 @@ impl BitmapOps for Bitmap {
         reqd_item_count: usize,
         range: Range<usize>,
     ) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         if item > range.end {
             return None;
@@ -1271,7 +1270,7 @@ impl BitmapOps for Bitmap {
         reqd_item_count: usize,
         range: Range<usize>,
     ) -> Option<usize> {
-        debug_assert!(self.bitmap.get() != ptr::null_mut());
+        debug_assert!(self.bitmap.get().is_some());
 
         if item > range.end {
             return None;

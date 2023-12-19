@@ -167,7 +167,7 @@ def init_arch(arch, config):
     "-semihosting",
   ]
   
-  if arch == "x86" or arch == "x86_64":
+  if arch == "x86" or arch == "x64":
     qemu_flags = QEMU_BASE_FLAGS + qemu_x86_flags
   elif arch == "aa64":
     qemu_flags = QEMU_BASE_FLAGS + qemu_aa64_flags
