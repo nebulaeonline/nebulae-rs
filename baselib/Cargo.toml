@@ -1,8 +1,10 @@
+# Package Info
 [package]
 name = "baselib"
 version = "0.1.0"
 edition = "2021"
 
+# Dependencies & features / options / flags
 [dependencies]
 uefi = "0.26"
 uefi-macros = "0.13"

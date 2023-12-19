@@ -598,9 +598,10 @@ pub mod raw {
 
     // our raw memcpy_aligned
     pub fn memcpy_usize_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
-        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
         debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
+
+        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
 
         unsafe {
             let src =
@@ -628,11 +629,12 @@ pub mod raw {
     }
 
     // our raw memmove_aligned
-    pub fn memmove_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
-        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
+    pub fn memmove_usize_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
         debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
 
+        let size_in_usize = size_in_bytes / MACHINE_UBYTES;
+        
         unsafe {
             let src =
                 core::slice::from_raw_parts_mut(src_addr.as_usize() as *mut usize, size_in_usize);
@@ -644,6 +646,18 @@ pub mod raw {
                 src[i] = 0;
             }
         }
+    }
+
+    // our function to make an object appear at a specific address with 
+    // completely zeroed memory
+    #[inline(always)]
+    pub fn abracadabra<T>(addr: impl MemAddr + AsUsize) -> *mut T {
+        let addr = addr.as_usize();
+        let ptr = addr as *mut T;
+        unsafe {
+            core::ptr::write_volatile(ptr, core::mem::zeroed());
+        }
+        ptr
     }
 
     // ref to an address

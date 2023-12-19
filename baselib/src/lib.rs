@@ -25,7 +25,7 @@ pub mod structures;
 // baselib::arch mods
 pub mod arch {
     #[cfg(target_arch = "aarch64")]
-    pub mod aarch64 {
+    pub mod aa64 {
         pub mod asm;
         pub mod async_exception;
         pub mod cpu;

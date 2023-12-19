@@ -1,1 +1,1 @@
-python build_x64.py build
+python build_iron.py build x64 debug

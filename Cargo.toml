@@ -4,3 +4,17 @@ members = [
     "baselib",
 ]
 resolver = "2"
+
+# Build Profiles
+[profile.profiling]
+inherits = "release"
+debug = true
+
+[profile.lto-debug]
+inherits = "release"
+lto = true
+debug = true
+
+[profile.lto-release]
+inherits = "release"
+lto = true

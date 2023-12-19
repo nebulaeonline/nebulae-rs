@@ -1,1 +1,1 @@
-python build_aa64.py run
+python build_iron.py run aa64 debug
