@@ -35,11 +35,11 @@ fn uefi_start(_image_handler: uefi::Handle, mut system_table: SystemTable<Boot>)
         serial_println!("disabling watchdog");
 
         // disable uefi watchdog timer
-        _ = (*st)
-            .as_ref()
-            .unwrap()
-            .boot_services()
-            .set_watchdog_timer(0, NEBULAE as u16, None);
+        _ = (*st).as_ref().unwrap().boot_services().set_watchdog_timer(
+            0,
+            baselib::common::NEBULAE as u64 + u16::MAX as u64,
+            None,
+        );
 
         // say our hello; this will be our last display output until display driver / framebuffer
         _ = writeln!((*st).as_mut().unwrap().stdout(), "Hello :)");
@@ -83,7 +83,7 @@ fn kernel_main() -> () {
     {
         // USING_FRAME_ALLOCATOR_6 is not required here because this is a non-mutable reference executed
         // as a single statement
-        let free_pages = unsafe { FRAME_ALLOCATOR_3.lock().as_ref().unwrap().free_page_count() };
+        let free_pages = unsafe { FRAME_ALLOCATOR_3.lock().as_mut().unwrap().free_page_count() };
         serial_println!(
             "Free pages: {} / {} KB",
             free_pages,
@@ -97,7 +97,7 @@ fn kernel_main() -> () {
         let mut kernel_vas = unsafe { KERNEL_BASE_VAS_4.lock() };
         *kernel_vas = Some(Vas::new());
         (*kernel_vas).as_mut().unwrap().base_page_table =
-            addr_to_ptr_mut::<BasePageTable, PhysAddr>(BasePageTable::new_base());
+            raw::raw_to_ptr_mut::<BasePageTable, PhysAddr>(BasePageTable::new_base());
         (*kernel_vas)
             .as_mut()
             .unwrap()

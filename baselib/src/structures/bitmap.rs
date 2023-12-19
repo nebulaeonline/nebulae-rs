@@ -10,16 +10,13 @@ pub trait BitmapOps {
     fn new(owner: Owner) -> Bitmap;
     fn get_owner() -> Owner;
 
-    fn init_phys_direct(&self, item_cap: usize, base_addr: PhysAddr) -> bool;
+    fn init_phys_fixed(&self, item_cap: usize, base_addr: PhysAddr) -> bool;
     fn init_phys_frame(&self, item_cap: usize) -> bool;
-    
+
     fn init_virt_frame(&self, item_cap: usize, base_addr: VirtAddr) -> bool;
     fn init_virt_vmem_fixed(&self, item_cap: usize, base_addr: VirtAddr) -> bool;
     fn init_virt_direct(&self, item_cap: usize, base_addr: VirtAddr) -> bool;
     fn init_virt_vmem(&self, item_cap: usize) -> bool;
-
-    fn is_virt(&self) -> bool;
-    fn is_phys(&self) -> bool;
 
     fn size_in_usize(&self) -> usize;
     fn size_in_pages(&self) -> usize;
@@ -75,6 +72,17 @@ pub trait BitmapOps {
     ) -> Option<usize>;
 }
 
+#[repr(usize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BitmapTyp {
+    PhysFixed,
+    PhysFrame,
+    VirtFrame,
+    VirtFixed,
+    VirtDirect,
+    VirtVmem,
+}
+
 pub struct Bitmap {
     bitmap: Cell<*mut usize>,
     capacity_in_units: Cell<usize>,
@@ -82,14 +90,21 @@ pub struct Bitmap {
     size_in_usize: Cell<usize>,
     size_in_pages: Cell<usize>,
     size_in_bytes: Cell<usize>,
-    virt: Cell<bool>,
+    typ: Cell<BitmapTyp>,
     owner: Cell<Owner>,
 }
 impl Drop for Bitmap {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        serial_println!(
+            "bitmap::drop(): bitmap: 0x{:016x}, typ: {:?}",
+            self.bitmap.get() as usize,
+            self.typ.get()
+        );
+
         // if our bitmap is not null, then we need to free the memory
         // associated with the bitmap or else we will leak memory
-        if self.bitmap.get() != ptr::null_mut() {
+        if self.bitmap.get() != ptr::null_mut() && *self.typ.get_mut() != BitmapTyp::PhysFixed {
             // we no longer have to worry about the frame allocator,
             // as all of its functions are now handled by vmem
             unsafe {
@@ -114,6 +129,9 @@ impl Drop for Bitmap {
 
 impl BitmapOps for Bitmap {
     fn new(owner: Owner) -> Bitmap {
+        #[cfg(debug_assertions)]
+        serial_println!("bitmap::new(): owner: {:?}", owner);
+        
         Bitmap {
             bitmap: Cell::new(ptr::null_mut()),
             capacity_in_units: Cell::new(0),
@@ -121,7 +139,7 @@ impl BitmapOps for Bitmap {
             size_in_usize: Cell::new(0),
             size_in_pages: Cell::new(0),
             size_in_bytes: Cell::new(0),
-            virt: Cell::new(false),
+            typ: Cell::new(BitmapTyp::PhysFixed),
             owner: Cell::new(owner),
         }
     }
@@ -131,18 +149,15 @@ impl BitmapOps for Bitmap {
         Owner::System
     }
 
-    // is phys and is virt
-    fn is_virt(&self) -> bool {
-        self.virt.get()
-    }
-
-    fn is_phys(&self) -> bool {
-        !self.virt.get()
-    }
-
     // this function assumes there's enough runway to allocate the bitmap
-    fn init_phys_direct(&self, item_cap: usize, base_addr: PhysAddr) -> bool {
-        
+    fn init_phys_fixed(&self, item_cap: usize, base_addr: PhysAddr) -> bool {
+        #[cfg(debug_assertions)]
+        serial_println!(
+            "bitmap::init_phys_fixed(): item_cap: {}, base_addr: 0x{:016x}",
+            item_cap,
+            base_addr.as_usize()
+        );
+
         // figure out how many usize's we need to cover the
         // requested capacity
         let size_in_usize = bitindex::calc_bitindex_size_in_usize(item_cap);
@@ -158,9 +173,8 @@ impl BitmapOps for Bitmap {
         self.size_in_bytes.set(size_in_bytes);
 
         // set our raw pointer to the base address
-        self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
-            base_addr.into(),
-        ));
+        self.bitmap
+            .set(raw::raw_to_ptr_mut::<usize, PhysAddr>(base_addr.into()));
 
         true
     }
@@ -169,7 +183,6 @@ impl BitmapOps for Bitmap {
     // from the physical frame allocator. if it fails, it will
     // return false. the bitmap is not fit for use.
     fn init_phys_frame(&self, item_cap: usize) -> bool {
-        
         // figure out how many usize's we need to cover the
         // requested capacity
         let size_in_usize = bitindex::calc_bitindex_size_in_usize(item_cap);
@@ -184,7 +197,7 @@ impl BitmapOps for Bitmap {
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_contiguous(size_in_bytes, Owner::System)
+                .alloc_default_pages(size_in_bytes, Owner::System)
         };
 
         if bitmap_phys_base.is_some() {
@@ -225,7 +238,7 @@ impl BitmapOps for Bitmap {
         self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
             bitmap_phys_base.unwrap().into(),
         ));
-         
+
         true
     }
 
@@ -252,7 +265,7 @@ impl BitmapOps for Bitmap {
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_contiguous(size_in_bytes, Owner::System)
+                .alloc_default_pages(size_in_bytes, Owner::System)
         };
 
         if bitmap_phys_base.is_some() {
@@ -335,10 +348,7 @@ impl BitmapOps for Bitmap {
                                 .base_page_table
                                 .as_mut()
                                 .unwrap()
-                                .unmap_page(
-                                    virt_base,
-                                    self.owner.get(),
-                                    PageSize::Small);
+                                .unmap_page(virt_base, self.owner.get(), PageSize::Small);
 
                             FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
                                 phys_page,
@@ -355,18 +365,17 @@ impl BitmapOps for Bitmap {
         self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
             bitmap_phys_base.unwrap().into(),
         ));
-       
+
         self.capacity_in_units.set(item_cap);
         self.units_free.set(item_cap);
         self.size_in_usize.set(size_in_usize);
         self.size_in_pages.set(size_in_pages);
         self.size_in_bytes.set(size_in_bytes);
-        self.virt.set(true);
-
+        self.typ.set(BitmapTyp::VirtFrame);
         true
     }
-    
-    // this function initializes the bitmap using virtual memory to a 
+
+    // this function initializes the bitmap using virtual memory to a
     // fixed location.
     fn init_virt_vmem_fixed(&self, item_cap: usize, base_addr: VirtAddr) -> bool {
         // figure out how many usize's we need to cover the
@@ -391,13 +400,13 @@ impl BitmapOps for Bitmap {
                     self.owner.get(),
                     PageSize::Small,
                     0,
-                    BitPattern::ZeroZero)
+                    BitPattern::ZeroZero,
+                )
         };
 
         if raw_alloc.is_some() {
-            self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
-                raw_alloc.unwrap(),
-            ));
+            self.bitmap
+                .set(raw::raw_to_ptr_mut::<usize, VirtAddr>(raw_alloc.unwrap()));
         } else {
             return false;
         }
@@ -407,14 +416,13 @@ impl BitmapOps for Bitmap {
         self.size_in_usize.set(size_in_usize);
         self.size_in_pages.set(size_in_pages);
         self.size_in_bytes.set(size_in_bytes);
-        self.virt.set(true);
-        
+        self.typ.set(BitmapTyp::VirtFixed);
+
         true
     }
 
     // this function assumes you've allocated enough runway to init the bitmap
     fn init_virt_direct(&self, item_cap: usize, base_addr: VirtAddr) -> bool {
-        
         // figure out how many usize's we need to cover the
         // requested capacity
         let size_in_usize = bitindex::calc_bitindex_size_in_usize(item_cap);
@@ -430,19 +438,17 @@ impl BitmapOps for Bitmap {
         self.size_in_bytes.set(size_in_bytes);
 
         // set our raw pointer to the base address
-        self.bitmap.set(raw::raw_to_ptr_mut::<usize, VirtAddr>(
-            base_addr.into(),
-        ));
+        self.bitmap
+            .set(raw::raw_to_ptr_mut::<usize, VirtAddr>(base_addr.into()));
 
         true
     }
 
-    // this function initializes the bitmap using virtual memory, allowing the 
+    // this function initializes the bitmap using virtual memory, allowing the
     // vm subsystem to place the bitmap where it wants.
     // TODO
+    #[allow(unused_variables)]
     fn init_virt_vmem(&self, item_cap: usize) -> bool {
-        
-        self.virt.set(true);
         true
     }
 
@@ -481,7 +487,7 @@ impl BitmapOps for Bitmap {
     fn set(&self, item: usize) {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let bitmap_ref = self.get_bitmap_ref_mut();
         bitmap_ref[item_index] |= 1 << item_bit_index;
@@ -491,7 +497,7 @@ impl BitmapOps for Bitmap {
     fn clear(&self, item: usize) {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let bitmap_ref = self.get_bitmap_ref_mut();
         bitmap_ref[item_index] &= !(1 << item_bit_index);
@@ -501,7 +507,7 @@ impl BitmapOps for Bitmap {
     fn is_set(&self, item: usize) -> bool {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let bitmap_ref = self.get_bitmap_ref();
         (bitmap_ref[item_index] & (1 << item_bit_index)) != 0
@@ -707,7 +713,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         for i in item_index..self.size_in_usize() {
             if bitmap[i] != usize::MIN {
@@ -725,7 +731,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         for i in item_index..self.size_in_usize() {
             if bitmap[i] != usize::MAX {
@@ -775,7 +781,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         for i in (0..item_index).rev() {
             if bitmap[i] != usize::MIN {
@@ -793,7 +799,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         for i in (0..item_index).rev() {
             if bitmap[i] != usize::MAX {
@@ -879,7 +885,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
         let mut found = false;
         let mut start = 0;
         let mut end = 0;
@@ -914,8 +920,8 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
-        
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
+
         let mut found = false;
         let mut start = 0;
         let mut end = 0;
@@ -1018,7 +1024,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let mut found = false;
         let mut start = 0;
@@ -1054,7 +1060,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let mut found = false;
         let mut start = 0;
@@ -1090,7 +1096,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         if bitmap[item_index] != usize::MIN {
             for j in item_bit_index..MACHINE_UBITS {
@@ -1106,7 +1112,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         if bitmap[item_index] != usize::MAX {
             for j in item_bit_index..MACHINE_UBITS {
@@ -1122,7 +1128,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let mut found = false;
         let mut start = 0;
@@ -1156,7 +1162,7 @@ impl BitmapOps for Bitmap {
         debug_assert!(self.bitmap.get() != ptr::null_mut());
 
         let bitmap = self.get_bitmap_ref();
-        let (item_index, item_bit_index) = bitindex::calc_bitindex(self.capacity_in_units.get(), item);
+        let (item_index, item_bit_index) = bitindex::calc_bitindex(item);
 
         let mut found = false;
         let mut start = 0;
@@ -1204,11 +1210,11 @@ impl BitmapOps for Bitmap {
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = if item < range.start {
-            bitindex::calc_bitindex(self.capacity_in_units.get(), range.start)
+            bitindex::calc_bitindex(range.start)
         } else {
-            bitindex::calc_bitindex(self.capacity_in_units.get(), item)
+            bitindex::calc_bitindex(item)
         };
-        let (end_index, _) = bitindex::calc_bitindex(self.capacity_in_units.get(), range.end);
+        let (end_index, _) = bitindex::calc_bitindex(range.end);
 
         let mut found = false;
         let mut start = 0;
@@ -1273,11 +1279,11 @@ impl BitmapOps for Bitmap {
 
         let bitmap = self.get_bitmap_ref();
         let (item_index, item_bit_index) = if item < range.start {
-            bitindex::calc_bitindex(self.capacity_in_units.get(), range.start)
+            bitindex::calc_bitindex(range.start)
         } else {
-            bitindex::calc_bitindex(self.capacity_in_units.get(), item)
+            bitindex::calc_bitindex(item)
         };
-        let (end_index, _) = bitindex::calc_bitindex(self.capacity_in_units.get(), range.end);
+        let (end_index, _) = bitindex::calc_bitindex(range.end);
 
         let mut found = false;
         let mut start = 0;

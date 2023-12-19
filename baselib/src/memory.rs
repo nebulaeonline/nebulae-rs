@@ -16,6 +16,8 @@ pub use crate::arch::aarch64::vmem64::{BasePageTable, PageSize, Vas};
 // CONSTANTS
 pub const MEMORY_TYPE_BOOT_FRAMER: u32 = 0x80015225;
 pub const MEMORY_TYPE_UEFI_MEM_MAP: u32 = 0x80025225;
+pub const MEMORY_TYPE_MEMORY_SUBSYSTEM: u32 = 0x80035225;
+pub const MEMORY_TYPE_BOOT_FRAMER_BITMAP: u32 = 0x80045225;
 
 // THE REST
 pub trait MemAddr: AsUsize {
@@ -127,19 +129,8 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
-    #[cfg(target_arch = "x86")]
-    fn is_page_aligned(&self) -> bool {
-        self.is_aligned_4k() || self.is_aligned_4m()
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn is_page_aligned(&self) -> bool {
-        self.is_aligned_4k() || self.is_aligned_2m() || self.is_aligned_1g()
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn is_page_aligned(&self) -> bool {
-        self.is_aligned_4k() || self.is_aligned_16k() || self.is_aligned_64k()
+    fn is_page_aligned(&self, page_size: PageSize) -> bool {
+        (self.as_usize() % page_size.into_bits()) == 0
     }
 }
 
@@ -383,8 +374,20 @@ pub trait PageDir {
     ) -> Option<VirtAddr>;
     fn unmap_page(&mut self, vaddr: VirtAddr, owner: Owner, page_size: PageSize);
     fn dealloc_page(&mut self, vaddr: VirtAddr, owner: Owner, page_size: PageSize);
-    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, owner: Owner, page_size: PageSize);
-    fn identity_map_page(&mut self, paddr: PhysAddr, owner: Owner, page_size: PageSize, flags: usize);
+    fn dealloc_pages_contiguous(
+        &mut self,
+        v: VirtAddr,
+        size: usize,
+        owner: Owner,
+        page_size: PageSize,
+    );
+    fn identity_map_page(
+        &mut self,
+        paddr: PhysAddr,
+        owner: Owner,
+        page_size: PageSize,
+        flags: usize,
+    );
     fn alloc_page_fixed(
         &mut self,
         v: VirtAddr,
@@ -503,15 +506,13 @@ pub trait AddrSpace {
 
 pub trait FrameAllocator {
     fn new() -> Self;
-    fn init(&self);
-    fn alloc_page(&self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
+    fn init(&mut self);
+    fn alloc_page(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
     fn dealloc_page(&self, page_base: PhysAddr, owner: Owner, page_size: PageSize);
-    fn free_page_count(&self) -> usize;
-    fn free_mem_count(&self) -> usize;
+    fn free_page_count(&mut self) -> usize;
+    fn free_mem_count(&mut self) -> usize;
     fn page_count(&self) -> usize;
     fn mem_count(&self) -> usize;
-    fn alloc_contiguous(&self, size: usize, owner: Owner) -> Option<PhysAddr>;
-    fn dealloc_contiguous(&self, page_base: PhysAddr, size: usize, owner: Owner);
     fn is_memory_frame_free(&self, page_base: PhysAddr) -> bool;
     fn is_frame_index_free(&self, page_idx: usize) -> bool;
 }
@@ -541,6 +542,19 @@ pub mod raw {
             let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, size);
 
             for i in 0..size {
+                base[i] = value;
+            }
+        }
+    }
+
+    pub fn memset_size_aligned(start_addr: PhysAddr, size: usize, value: usize) {
+        let usize_units = size / MACHINE_UBYTES;
+
+        unsafe {
+            let base =
+                core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut usize, usize_units);
+
+            for i in 0..usize_units {
                 base[i] = value;
             }
         }
@@ -603,7 +617,7 @@ pub mod raw {
     // our raw memmove
     pub fn memmove(src_addr: PhysAddr, dest_addr: PhysAddr, size: usize) {
         unsafe {
-            let src = core::slice::from_raw_parts(src_addr.as_usize() as *const u8, size);
+            let src = core::slice::from_raw_parts_mut(src_addr.as_usize() as *mut u8, size);
             let dest = core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut u8, size);
 
             for i in 0..size {
@@ -621,7 +635,7 @@ pub mod raw {
 
         unsafe {
             let src =
-                core::slice::from_raw_parts(src_addr.as_usize() as *const usize, size_in_usize);
+                core::slice::from_raw_parts_mut(src_addr.as_usize() as *mut usize, size_in_usize);
             let dest =
                 core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
 
@@ -744,5 +758,11 @@ pub mod pages {
     #[inline(always)]
     pub const fn usize_to_page_index(raw: usize) -> usize {
         raw >> MEMORY_DEFAULT_SHIFT
+    }
+
+    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
+    #[inline(always)]
+    pub fn addr_to_page_index(addr: impl MemAddr + AsUsize + Sized) -> usize {
+        addr.as_usize() >> MEMORY_DEFAULT_SHIFT
     }
 }

@@ -1,4 +1,4 @@
-use crate::bitmap::*;
+use crate::structures::bitmap::*;
 use crate::common::base::*;
 use crate::kernel_statics::*;
 

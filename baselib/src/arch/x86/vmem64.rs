@@ -56,7 +56,7 @@ impl AddrSpace for Vas {
                     unsafe {
                         self.base_page_table.as_mut().unwrap().identity_map_page(
                             PhysAddr(page_start),
-                            Owner::Uefi,                            
+                            Owner::Uefi,
                             PageSize::Small,
                             PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                         );
@@ -73,7 +73,7 @@ impl AddrSpace for Vas {
 pub type Pte = PhysAddr;
 
 #[repr(usize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PageSize {
     Small = USIZE_4K,
     Medium = USIZE_2M,
@@ -304,6 +304,11 @@ impl PageDir for BasePageTable {
             // Now that we've cleaned up the already mapped pages,
             // and we've mapped the 1GB page, we can return
             x86_invalidate_page(v.as_usize());
+            // mark the owner for this page in the page info struct
+            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageidx = pages::usize_to_page_index(p.as_usize());
+            pageinfo[pageidx].owner = owner;
+
             return Some(v);
         } // PageSize::Huge
 
@@ -395,6 +400,11 @@ impl PageDir for BasePageTable {
             // Now that we've cleaned up the already mapped pages,
             // and we've mapped the 2MB page, we can return
             x86_invalidate_page(v.as_usize());
+            // mark the owner for this page in the page info struct
+            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageidx = pages::usize_to_page_index(p.as_usize());
+            pageinfo[pageidx].owner = owner;
+
             return Some(v);
         } // PageSize::Medium
 
@@ -434,6 +444,11 @@ impl PageDir for BasePageTable {
         pt.entries[pt_idx] = p;
         pt.entries[pt_idx].inner_or(flags);
         x86_invalidate_page(v.as_usize());
+        // mark the owner for this page in the page info struct
+        let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+        let pageidx = pages::usize_to_page_index(p.as_usize());
+        pageinfo[pageidx].owner = owner;
+
         Some(v)
     }
 
@@ -448,7 +463,13 @@ impl PageDir for BasePageTable {
         }
     }
 
-    fn dealloc_pages_contiguous(&mut self, v: VirtAddr, size: usize, owner: Owner, page_size: PageSize) {
+    fn dealloc_pages_contiguous(
+        &mut self,
+        v: VirtAddr,
+        size: usize,
+        owner: Owner,
+        page_size: PageSize,
+    ) {
         let page_count = pages::calc_pages_reqd(size, page_size);
         let mut cv: VirtAddr = v;
 
@@ -489,6 +510,24 @@ impl PageDir for BasePageTable {
                 }
             }
         }
+
+        let fn_unmap_page_info = |p: PhysAddr, page_size: PageSize| {
+            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageidx = pages::usize_to_page_index(p.as_usize());
+
+            if page_size > PageSize::Small {
+                // if this is a huge or medium page, then we need to clear the owner and status
+                // for every page underneath
+                let page_count = pages::calc_pages_reqd(page_size.into_bits(), PageSize::Small);
+                for i in 0..page_count {
+                    pageinfo[pageidx + i].owner = Owner::Nobody;
+                    pageinfo[pageidx + i].status = pages::PageStatus::Free;
+                }
+            } else {
+                pageinfo[pageidx].owner = Owner::Nobody;
+                pageinfo[pageidx].status = pages::PageStatus::Free;
+            }
+        };
 
         // check our entry in the pml4 table, which maps 512GB chunks
         if self.entries[pml4_idx] == PhysAddr(0) {
@@ -546,6 +585,9 @@ impl PageDir for BasePageTable {
                 );
             }
 
+            // Clear our owner information
+            fn_unmap_page_info(pdpt.entries[pdpt_idx].align_1g(), page_size);
+
             // Unmap our huge page
             pdpt.entries[pdpt_idx] = PhysAddr(0);
             x86_invalidate_page(v.as_usize());
@@ -601,6 +643,9 @@ impl PageDir for BasePageTable {
                 );
             }
 
+            // Clear our owner information
+            fn_unmap_page_info(pd.entries[pd_idx].align_2m(), page_size);
+
             // unmap our medium page
             pd.entries[pd_idx] = PhysAddr(0);
             x86_invalidate_page(v.as_usize());
@@ -616,6 +661,9 @@ impl PageDir for BasePageTable {
         // create a reference to our pt
         pt = raw::raw_to_static_ref_mut::<PageTable, PhysAddr>(pd.entries[pd_idx].align_4k());
 
+        // Clear our owner information
+        fn_unmap_page_info(pt.entries[pt_idx].align_4k(), page_size);
+
         // Unmap our small page
         // no page frame flag for 4KB pages
         pt.entries[pt_idx] = PhysAddr(0);
@@ -623,7 +671,13 @@ impl PageDir for BasePageTable {
     }
 
     fn identity_map_page(&mut self, p: PhysAddr, owner: Owner, page_size: PageSize, flags: usize) {
-        self.map_page(p, VirtAddr(p.align_4k().as_usize()), owner, page_size, flags);
+        self.map_page(
+            p,
+            VirtAddr(p.align_4k().as_usize()),
+            owner,
+            page_size,
+            flags,
+        );
     }
 
     fn alloc_page_fixed(
@@ -632,7 +686,7 @@ impl PageDir for BasePageTable {
         owner: Owner,
         page_size: PageSize,
         flags: usize,
-        bit_pattern: BitPattern,        
+        bit_pattern: BitPattern,
     ) -> VirtAddr {
         let new_page_frame_base = unsafe {
             FRAME_ALLOCATOR_3
@@ -744,17 +798,11 @@ impl PageDir for BasePageTable {
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_contiguous(size, Owner::System)
+                .alloc_default_pages(size, Owner::System)
         };
         if page_base.is_some() {
-            for i in 0..size_in_pages {
-                self.map_page(
-                    page_base.unwrap(),
-                    vb,
-                    owner,
-                    page_size,
-                    flags,
-                );
+            for _i in 0..size_in_pages {
+                self.map_page(PhysAddr(page_base.unwrap()), vb, owner, page_size, flags);
                 vb.inner_inc_by_page_size(page_size);
             }
         } else {

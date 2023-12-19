@@ -10,7 +10,6 @@
 // #![feature(generic_const_exprs)]
 
 // baselib mods
-pub mod bitmap;
 pub mod common;
 pub mod cpu;
 pub mod frame_alloc;

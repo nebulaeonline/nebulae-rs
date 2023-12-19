@@ -1,8 +1,9 @@
 use core::mem;
 
-use crate::bitmap::*;
+use crate::structures::bitmap::*;
 use crate::common::base::*;
 use crate::kernel_statics::*;
+use crate::serial_println;
 
 #[repr(C)]
 pub struct GenesisBlock {
@@ -13,7 +14,7 @@ pub struct GenesisBlock {
     pub phys_mem_max: PhysAddr,
     pub page_info: *mut [pages::PageInfo],
     pub mem_regions: *mut [MemRegionDescr],
-    pub region_bitmap: *mut Bitmap,
+    pub region_bitmap_struct: Bitmap,
     pub base_vas: spin::Mutex<Vas>,
 }
 
@@ -63,53 +64,87 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
     #[cfg(debug_assertions)]
     serial_println!("allocating memory for uefi memory map");
 
-    // Allocate memory for the bitmap using UEFI allocate_pages.
-    let st = unsafe { UEFI_SYSTEM_TABLE_0.lock().as_mut().unwrap().unsafe_clone() };
-    let mut mm: MemoryMap;
-
-    // Figure out how many we need (the map size will change)
-    let mm_sizes = st.boot_services().memory_map_size();
-    let mut mm_pages_reqd = pages::calc_pages_reqd(mm_sizes.map_size, PageSize::Small);
-    let mut mm_total_allocation = pages::pages_to_bytes(mm_pages_reqd);
-
-    // if we have less than 64 entries worth of free space, add a page to the
-    // allocation
-    if mm_total_allocation - mm_sizes.map_size < (64 * mm_sizes.entry_size) {
-        mm_pages_reqd += 1;
-        mm_total_allocation += MEMORY_DEFAULT_PAGE_USIZE;
-    }
-
-    // actually allocate memory for the map
-    let mm_result = st.boot_services().allocate_pages(
-        AllocateType::AnyPages,
-        MemoryType::custom(MEMORY_TYPE_UEFI_MEM_MAP), // Use the custom memory type
-        mm_pages_reqd,
-    );
-
-    // make sure we got valid results; panic if not
-    match mm_result {
-        Ok(frame) => {
-            mm = unsafe {
-                st.boot_services()
-                    .memory_map(core::slice::from_raw_parts_mut(
-                        frame as *mut u8,
-                        pages::pages_to_bytes(mm_pages_reqd),
-                    ))
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Physical frame allocator failed to read the UEFI memory map: {:?}",
-                            e
-                        );
-                    })
-            };
-        }
-        Err(_) => panic!("Failed to allocate memory for physical frame allocator"),
-    }
-
     // Process the memory map
+    let mm: MemoryMap;
     let mut max_phys_present: usize = 0;
 
-    for e in mm.entries() {
+    serial_println!("allocating 2 pages for memory map");
+
+    // Allocate memory for the memory map
+    let mm_alloc_result = unsafe {
+        UEFI_SYSTEM_TABLE_0
+            .lock()
+            .as_ref()
+            .unwrap()
+            .boot_services()
+            .allocate_pages(
+                AllocateType::MaxAddress(SIZE_2G),
+                MemoryType::custom(MEMORY_TYPE_UEFI_MEM_MAP), // Use the custom memory type
+                2,
+            )
+    };
+
+    // panic if we can't allocate memory for the memory map
+    if mm_alloc_result.is_err() {
+        panic!("Failed to allocate memory for UEFI memory map");
+    } else {
+        // get the memory map
+        let buf_addr = PhysAddr::from(mm_alloc_result.unwrap().as_usize());
+
+        raw::memset_size_aligned(buf_addr, USIZE_8K, 0);
+
+        let buf = unsafe {
+            core::slice::from_raw_parts_mut::<u8>(
+                raw::raw_to_ptr_mut::<u8, PhysAddr>(buf_addr),
+                USIZE_8K,
+            )
+        };
+
+        let buf2 = unsafe {
+            core::slice::from_raw_parts_mut::<u8>(
+                raw::raw_to_ptr_mut::<u8, PhysAddr>(buf_addr),
+                USIZE_8K,
+            )
+        };
+
+        let uefi_result = unsafe {
+            UEFI_SYSTEM_TABLE_0
+                .lock()
+                .as_ref()
+                .unwrap()
+                .boot_services()
+                .memory_map(buf.as_mut())
+        };
+
+        if uefi_result.is_err() {
+            // try one more time to get the map
+            raw::memset_size_aligned(buf_addr, USIZE_8K, 0);
+            let uefi_try2 = unsafe {
+                UEFI_SYSTEM_TABLE_0
+                    .lock()
+                    .as_ref()
+                    .unwrap()
+                    .boot_services()
+                    .memory_map(buf2.as_mut())
+            };
+
+            if uefi_try2.is_err() {
+                panic!("Failed to get UEFI memory map");
+            } else {
+                mm = uefi_try2.unwrap();
+            }
+        } else {
+            mm = uefi_result.unwrap();
+        }
+    }
+
+    {
+        // store memory map in global
+        let mut map = unsafe { UEFI_MEMORY_MAP_1.lock() };
+        *map = Some(mm);
+    }
+
+    for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_mut().unwrap().entries() } {
         // output mm in debug mode
         #[cfg(debug_assertions)]
         serial_println!(
@@ -150,7 +185,7 @@ pub fn locate_genesis_block() -> (&'static mut GenesisBlock, usize, PhysAddr) {
         // otherwise, we need to see if the largest block's base address is page aligned
         // if it is, then we need to grab the last page from the smallest block
         // if it isn't, then we can grab the first page from the largest block
-        if largest_conv_block.is_page_aligned() {
+        if largest_conv_block.is_page_aligned(PageSize::Small) {
             align_down(
                 smallest_conv_block.as_usize() + smallest_conv_block_size - 1,
                 MEMORY_DEFAULT_PAGE_USIZE,
@@ -191,9 +226,9 @@ pub fn init_genesis_block() {
         }
     }
 
-    let mut mm: MemoryMap;
+    let mm: MemoryMap;
 
-    let (mut gb, conv_page_count, max_phys_mem) = locate_genesis_block();
+    let (gb, conv_page_count, max_phys_mem) = locate_genesis_block();
 
     // set the basic kernel table parameters
     gb.magic = NEBULAE;
@@ -220,6 +255,12 @@ pub fn init_genesis_block() {
         PageSize::Small,
     );
 
+    #[cfg(debug_assertions)]
+    serial_println!(
+        "physical frame allocator requires {} pages",
+        bitmap_pages_reqd + page_info_pages_reqd + storage_pages_reqd
+    );
+
     // Allocate memory for the bitmap using UEFI allocate_pages().
     let bitmap_alloc_result = unsafe {
         UEFI_SYSTEM_TABLE_0
@@ -228,8 +269,8 @@ pub fn init_genesis_block() {
             .unwrap()
             .boot_services()
             .allocate_pages(
-                AllocateType::AnyPages,
-                MemoryType::custom(MEMORY_TYPE_BOOT_FRAMER), // Use the custom memory type
+                AllocateType::MaxAddress(SIZE_2G),
+                MemoryType::custom(MEMORY_TYPE_BOOT_FRAMER_BITMAP), // Use the custom memory type
                 bitmap_pages_reqd,
             )
     };
@@ -237,13 +278,12 @@ pub fn init_genesis_block() {
     if bitmap_alloc_result.is_err() {
         panic!("Failed to allocate memory for physical frame allocator tree bitmap");
     } else {
-        unsafe {
-            *gb.region_bitmap = Bitmap::new(Owner::System);
-            (*gb.region_bitmap).init_phys_direct(
-                gb.total_pages,
-                PhysAddr::from(bitmap_alloc_result.unwrap()),
-            );
-        }
+        #[cfg(debug_assertions)]
+        serial_println!("physical frame allocator bitmap allocated");
+
+        gb.region_bitmap_struct = Bitmap::new(Owner::Memory);
+        gb.region_bitmap_struct
+            .init_phys_fixed(gb.total_pages, PhysAddr::from(bitmap_alloc_result.unwrap()));
     }
 
     // Allocate for page info
@@ -254,8 +294,8 @@ pub fn init_genesis_block() {
             .unwrap()
             .boot_services()
             .allocate_pages(
-                AllocateType::AnyPages,
-                MemoryType::custom(MEMORY_TYPE_BOOT_FRAMER), // Use the custom memory type
+                AllocateType::MaxAddress(SIZE_2G),
+                MemoryType::custom(MEMORY_TYPE_MEMORY_SUBSYSTEM), // Use the custom memory type
                 page_info_pages_reqd,
             )
     };
@@ -290,7 +330,7 @@ pub fn init_genesis_block() {
 
         // now go back through the memory map and mark the pages
         // as appropriate for status and owner info
-        for e in mm.entries() {
+        for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_mut().unwrap().entries() } {
             if e.phys_start as usize > gb.phys_mem_max.as_usize() {
                 break;
             }
@@ -299,7 +339,7 @@ pub fn init_genesis_block() {
                 let mut frame_addr: PhysAddr = PhysAddr::from(e.phys_start);
 
                 unsafe {
-                    for i in 0..e.page_count as usize {
+                    for _i in 0..e.page_count as usize {
                         let frame_idx = pages::usize_to_page_index(frame_addr.as_usize());
 
                         gb.page_info.as_mut().unwrap()[frame_idx].status =

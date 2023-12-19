@@ -144,7 +144,7 @@ pub mod bit {
                 - calc_bitindex_size_in_bytes(capacity)
         }
 
-        pub fn calc_bitindex(capacity: usize, index: usize) -> (usize, usize) {
+        pub fn calc_bitindex(index: usize) -> (usize, usize) {
             let index_usize = index / MACHINE_UBITS;
             let index_bit = index % MACHINE_UBITS;
             (index_usize, index_bit)
@@ -390,6 +390,14 @@ pub mod base {
         ((high as u128) << 64) | (low as u128)
     }
 
+    pub const fn hi64(value: u128) -> u64 {
+        ((value & QWORD1_U128) >> 64) as u64
+    }
+
+    pub const fn lo64(value: u128) -> u64 {
+        (value & QWORD0_U128) as u64
+    }
+
     pub const MACHINE_UBYTES: usize = mem::size_of::<usize>();
     pub const MACHINE_BYTES: u64 = MACHINE_UBYTES as u64;
 
@@ -406,6 +414,7 @@ pub mod base {
     #[cfg(target_pointer_width = "64")]
     pub const MEMORY_DEFAULT_PAGE_SIZE: u64 = SIZE_4K;
 
+    // the factor for default page size in bits for shifting ops
     pub const MEMORY_DEFAULT_SHIFT: usize = UFACTOR_OF_4K;
 
     pub const PAGE_TABLE_ENTRY_SIZE: usize = core::mem::size_of::<usize>();
