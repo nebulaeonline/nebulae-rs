@@ -76,7 +76,7 @@ impl MemoryPool {
     pub fn init(&mut self) -> Option<VirtAddr> {
         // first try and allocate contiguous memory, then fall back to non-contiguous
         let contiguous = unsafe {
-            KERNEL_BASE_VAS_4
+            iron().base_vas_0_5
                 .lock()
                 .as_mut()
                 .unwrap()
@@ -139,24 +139,24 @@ impl MemoryPool {
 
 impl Drop for MemoryPool {
     fn drop(&mut self) {
-        // we need to free the memory we allocated for the pool;
-        // the bitmap will be de-allocated when the bitmap is dropped
-        // as part of its own custom Drop implementation
-        unsafe {
-            KERNEL_BASE_VAS_4
-                .lock()
-                .as_mut()
-                .unwrap()
-                .base_page_table
-                .as_mut()
-                .unwrap()
-                .dealloc_pages_contiguous(
-                    self.start,
-                    self.capacity * self.block_size,
-                    Owner::System,
-                    PageSize::Small,
-                )
-        };
+        // // we need to free the memory we allocated for the pool;
+        // // the bitmap will be de-allocated when the bitmap is dropped
+        // // as part of its own custom Drop implementation
+        // unsafe {
+        //     KERNEL_BASE_VAS_4
+        //         .lock()
+        //         .as_mut()
+        //         .unwrap()
+        //         .base_page_table
+        //         .as_mut()
+        //         .unwrap()
+        //         .dealloc_pages_contiguous(
+        //             self.start,
+        //             self.capacity * self.block_size,
+        //             Owner::System,
+        //             PageSize::Small,
+        //         )
+        // };
     }
 }
 

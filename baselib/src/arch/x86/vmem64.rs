@@ -1,19 +1,11 @@
 #![allow(dead_code)]
+use core::ptr;
 
 use uefi::table::boot::MemoryType;
 
 use crate::common::base::*;
-use crate::kernel_statics::*;
-
 use crate::arch::x86::asm::{x86_invalidate_page, x86_write_cr3};
 
-use core::ptr;
-
-// CONSTANTS
-
-// STATICS
-
-// THE REST
 pub struct Vas {
     pub cr3: PhysAddr,
     pub base_page_table: *mut BasePageTable,
@@ -48,7 +40,7 @@ impl AddrSpace for Vas {
     }
 
     fn identity_map_based_on_memory_map(&mut self) {
-        for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_ref().unwrap().entries() } {
+        for e in iron().uefi_mem_map_0_1.as_mut().unwrap().entries() {
             if e.ty != MemoryType::CONVENTIONAL {
                 for i in 0..e.page_count as usize {
                     let page_start = e.phys_start as usize + (i * MEMORY_DEFAULT_PAGE_USIZE);
@@ -104,13 +96,12 @@ pub type BasePageTable = PageTable;
 
 impl PageDir for BasePageTable {
     fn new_base() -> PhysAddr {
-        let new_pml4_base = unsafe {
-            FRAME_ALLOCATOR_3
+        let new_pml4_base = 
+            iron().frame_alloc_internal_0_2
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_page(Owner::System, PageSize::Small)
-        };
+                .alloc_page(Owner::System, PageSize::Small);
 
         match new_pml4_base {
             None => panic!("Out of memory when allocating for a new pml4 for a new vas"),
@@ -214,13 +205,12 @@ impl PageDir for BasePageTable {
         // check our entry in the pml4 table, which maps 512GB chunks
         // create a new pdpt if one does not exist
         if self.entries[pml4_idx] == PhysAddr(0) {
-            let new_pdpt_base = unsafe {
-                FRAME_ALLOCATOR_3
+            let new_pdpt_base = 
+                iron().frame_alloc_internal_0_2
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_page(Owner::System, PageSize::Small)
-            };
+                    .alloc_page(Owner::System, PageSize::Small);
 
             match new_pdpt_base {
                 None => return None,
@@ -266,13 +256,12 @@ impl PageDir for BasePageTable {
                             local_pd.entries[i].as_usize(),
                             PAGING_IS_PAGE_FRAME_BIT,
                         ) {
-                            unsafe {
-                                FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                                    local_pd.entries[i].align_4k(),
-                                    Owner::System,
-                                    PageSize::Small,
-                                );
-                            }
+                            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                                local_pd.entries[i].align_4k(),
+                                Owner::System,
+                                PageSize::Small,
+                            );
+
                             self.unmap_page(
                                 VirtAddr(local_pd.entries[i].align_4k().as_usize()),
                                 Owner::Memory,
@@ -282,13 +271,11 @@ impl PageDir for BasePageTable {
                     }
 
                     // now de-allocate the page directory itself
-                    unsafe {
-                        FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                            pdpt.entries[pdpt_idx].align_4k(),
-                            Owner::System,
-                            PageSize::Small,
-                        )
-                    }
+                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                        pdpt.entries[pdpt_idx].align_4k(),
+                        Owner::System,
+                        PageSize::Small);
+
                     self.unmap_page(
                         VirtAddr(pdpt.entries[pdpt_idx].align_4k().as_usize()),
                         Owner::Memory,
@@ -305,7 +292,7 @@ impl PageDir for BasePageTable {
             // and we've mapped the 1GB page, we can return
             x86_invalidate_page(v.as_usize());
             // mark the owner for this page in the page info struct
-            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
             let pageidx = pages::usize_to_page_index(p.as_usize());
             pageinfo[pageidx].owner = owner;
 
@@ -314,13 +301,12 @@ impl PageDir for BasePageTable {
 
         // create a new pd if one does not exist
         if pdpt.entries[pdpt_idx] == PhysAddr(0) {
-            let new_pd_base = unsafe {
-                FRAME_ALLOCATOR_3
+            let new_pd_base = 
+                iron().frame_alloc_internal_0_2
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_page(Owner::System, PageSize::Small)
-            };
+                    .alloc_page(Owner::System, PageSize::Small);
 
             match new_pd_base {
                 None => return None,
@@ -362,13 +348,12 @@ impl PageDir for BasePageTable {
                             PAGING_IS_PAGE_FRAME_BIT,
                         ) {
                             // de-allocate every page under this page table
-                            unsafe {
-                                FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                                    pd.entries[i].align_4k(),
-                                    Owner::System,
-                                    PageSize::Small,
-                                );
-                            }
+                            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                                pd.entries[i].align_4k(),
+                                Owner::System,
+                                PageSize::Small,
+                            );
+
                             self.unmap_page(
                                 VirtAddr(pd.entries[i].align_4k().as_usize()),
                                 Owner::Memory,
@@ -378,13 +363,12 @@ impl PageDir for BasePageTable {
                     }
 
                     // now de-allocate the page table itself
-                    unsafe {
-                        FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                            pd.entries[pd_idx].align_4k(),
-                            Owner::System,
-                            PageSize::Small,
-                        )
-                    }
+                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                        pd.entries[pd_idx].align_4k(),
+                        Owner::System,
+                        PageSize::Small,
+                    );
+
                     self.unmap_page(
                         VirtAddr(pd.entries[pd_idx].align_4k().as_usize()),
                         Owner::Memory,
@@ -401,7 +385,7 @@ impl PageDir for BasePageTable {
             // and we've mapped the 2MB page, we can return
             x86_invalidate_page(v.as_usize());
             // mark the owner for this page in the page info struct
-            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
             let pageidx = pages::usize_to_page_index(p.as_usize());
             pageinfo[pageidx].owner = owner;
 
@@ -412,13 +396,12 @@ impl PageDir for BasePageTable {
 
         // create a new pt if one does not exist
         if pd.entries[pd_idx] == PhysAddr(0) {
-            let new_pt_base = unsafe {
-                FRAME_ALLOCATOR_3
+            let new_pt_base = 
+                iron().frame_alloc_internal_0_2
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_page(Owner::System, PageSize::Small)
-            };
+                    .alloc_page(Owner::System, PageSize::Small);
 
             match new_pt_base {
                 None => return None,
@@ -445,7 +428,7 @@ impl PageDir for BasePageTable {
         pt.entries[pt_idx].inner_or(flags);
         x86_invalidate_page(v.as_usize());
         // mark the owner for this page in the page info struct
-        let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+        let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
         let pageidx = pages::usize_to_page_index(p.as_usize());
         pageinfo[pageidx].owner = owner;
 
@@ -454,13 +437,11 @@ impl PageDir for BasePageTable {
 
     fn dealloc_page(&mut self, v: VirtAddr, owner: Owner, page_size: PageSize) {
         self.unmap_page(v, owner, page_size);
-        unsafe {
-            FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                self.virt_to_phys(v),
-                Owner::System,
-                page_size,
-            );
-        }
+        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+            self.virt_to_phys(v),
+            Owner::System,
+            page_size,
+        );
     }
 
     fn dealloc_pages_contiguous(
@@ -475,13 +456,11 @@ impl PageDir for BasePageTable {
 
         for _i in 0..page_count {
             self.unmap_page(cv, owner, page_size);
-            unsafe {
-                FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                    self.virt_to_phys(cv),
-                    Owner::System,
-                    page_size,
-                );
-            }
+            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                self.virt_to_phys(cv),
+                Owner::System,
+                page_size,
+            );
             cv.inner_inc_by_page_size(page_size);
         }
     }
@@ -512,7 +491,7 @@ impl PageDir for BasePageTable {
         }
 
         let fn_unmap_page_info = |p: PhysAddr, page_size: PageSize| {
-            let pageinfo = unsafe { iron().page_info.as_mut().unwrap() };
+            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
             let pageidx = pages::usize_to_page_index(p.as_usize());
 
             if page_size > PageSize::Small {
@@ -555,13 +534,12 @@ impl PageDir for BasePageTable {
                 // de-allocate every page table under this page directory
                 for i in 0..PAGE_TABLE_MAX_ENTRIES {
                     if !ubit::is_bit_set(local_pd.entries[i].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
-                        unsafe {
-                            FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                                local_pd.entries[i].align_4k(),
-                                Owner::Memory,
-                                PageSize::Small,
-                            );
-                        }
+                        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                            local_pd.entries[i].align_4k(),
+                            Owner::Memory,
+                            PageSize::Small,
+                        );
+
                         self.unmap_page(
                             VirtAddr(local_pd.entries[i].align_4k().as_usize()),
                             Owner::Memory,
@@ -571,13 +549,12 @@ impl PageDir for BasePageTable {
                 }
 
                 // now de-allocate the page directory itself
-                unsafe {
-                    FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                        pdpt.entries[pdpt_idx].align_4k(),
-                        Owner::System,
-                        PageSize::Small,
-                    )
-                }
+                iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                    pdpt.entries[pdpt_idx].align_4k(),
+                    Owner::System,
+                    PageSize::Small,
+                );
+
                 self.unmap_page(
                     VirtAddr(pdpt.entries[pdpt_idx].align_4k().as_usize()),
                     owner,
@@ -613,13 +590,12 @@ impl PageDir for BasePageTable {
                     // don't do anything if this was already a 2MB page, since there is no page table in that case
                     if !ubit::is_bit_set(pd.entries[pd_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
                         // de-allocate every page under this page table
-                        unsafe {
-                            FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                                pd.entries[i].align_4k(),
-                                Owner::Memory,
-                                PageSize::Small,
-                            );
-                        }
+                        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                            pd.entries[i].align_4k(),
+                            Owner::Memory,
+                            PageSize::Small,
+                        );
+
                         self.unmap_page(
                             VirtAddr(pd.entries[i].align_4k().as_usize()),
                             Owner::Memory,
@@ -629,13 +605,12 @@ impl PageDir for BasePageTable {
                 }
 
                 // now de-allocate the page directory itself
-                unsafe {
-                    FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                        pdpt.entries[pdpt_idx].align_4k(),
-                        Owner::Memory,
-                        PageSize::Small,
-                    )
-                }
+                iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                    pdpt.entries[pdpt_idx].align_4k(),
+                    Owner::Memory,
+                    PageSize::Small,
+                );
+
                 self.unmap_page(
                     VirtAddr(pdpt.entries[pdpt_idx].align_4k().as_usize()),
                     Owner::Memory,
@@ -688,13 +663,12 @@ impl PageDir for BasePageTable {
         flags: usize,
         bit_pattern: BitPattern,
     ) -> VirtAddr {
-        let new_page_frame_base = unsafe {
-            FRAME_ALLOCATOR_3
+        let new_page_frame_base = 
+            iron().frame_alloc_internal_0_2
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_page(Owner::System, page_size)
-        };
+                .alloc_page(Owner::System, page_size);
 
         // Looks like we were not able to obtain a page
         if new_page_frame_base.is_none() {
@@ -730,13 +704,13 @@ impl PageDir for BasePageTable {
         let mut allocated_pages: usize = 0;
 
         for i in 0..size_in_pages {
-            let page_base = unsafe {
-                FRAME_ALLOCATOR_3
+            let page_base = 
+                iron().frame_alloc_internal_0_2
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_page(Owner::System, page_size)
-            };
+                    .alloc_page(Owner::System, page_size);
+
             if page_base.is_some() {
                 allocated_pages += 1;
 
@@ -753,13 +727,11 @@ impl PageDir for BasePageTable {
 
                 for _j in 0..allocated_pages {
                     self.unmap_page(cv, owner, page_size);
-                    unsafe {
-                        FRAME_ALLOCATOR_3.lock().as_mut().unwrap().dealloc_page(
-                            self.virt_to_phys(cv),
-                            Owner::System,
-                            PageSize::Small,
-                        );
-                    }
+                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                        self.virt_to_phys(cv),
+                        Owner::System,
+                        PageSize::Small,
+                    );
 
                     cv.inner_inc_by_page_size(PageSize::Small);
                 }
@@ -793,13 +765,13 @@ impl PageDir for BasePageTable {
         let size_in_pages = pages::calc_pages_reqd(size, page_size);
         let mut vb = v.clone();
 
-        let page_base = unsafe {
-            FRAME_ALLOCATOR_3
+        let page_base = 
+            iron().frame_alloc_internal_0_2
                 .lock()
                 .as_mut()
                 .unwrap()
-                .alloc_default_pages(size, Owner::System)
-        };
+                .alloc_default_pages(size, Owner::System);
+            
         if page_base.is_some() {
             for _i in 0..size_in_pages {
                 self.map_page(PhysAddr(page_base.unwrap()), vb, owner, page_size, flags);

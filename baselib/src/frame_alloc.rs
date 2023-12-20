@@ -2,7 +2,6 @@ use core::cell::Cell;
 
 use crate::structures::bitmap::*;
 use crate::common::base::*;
-use crate::kernel_statics::UEFI_MEMORY_MAP_1;
 use crate::structures::tree::red_black::*;
 
 #[repr(C)]
@@ -136,7 +135,7 @@ impl MemRegionDescr {
 #[allow(dead_code)]
 pub struct TreeAllocator {
     // The base address
-    phys_base: Cell<PhysAddr>,
+    pub phys_base: Cell<PhysAddr>,
 
     count: Cell<usize>,
     capacity: Cell<usize>,
@@ -149,7 +148,7 @@ pub struct TreeAllocator {
     merge_free_dealloc_count: Cell<usize>,
     pub merge_free_dealloc_interval: Cell<usize>,
 
-    bitmap: Bitmap,
+    pub bitmap: Option<Bitmap>,
 }
 
 impl TreeAllocator {
@@ -165,7 +164,8 @@ impl TreeAllocator {
         let end_page_idx = pages::usize_to_page_index(start_page_base_addr.as_usize() + size - 1);
 
         for i in start_page_idx..end_page_idx {
-            let page_info = unsafe { iron().page_info.as_mut() };
+            let page_info = unsafe { iron().page_info.unwrap().as_mut() };
+
             if page_info.is_none() {
                 panic!("Fatal error: page_info is None");
             }
@@ -270,19 +270,27 @@ impl TreeAllocator {
     }
 
     // Alloc before doing anything else
-    fn alloc_new_slot_mut(&self) -> Option<usize> {
-        let new_struct_slot = self.bitmap.find_first_set();
+    fn alloc_new_slot_mut(&mut self) -> Option<usize> {
+        if self.bitmap.is_none() {
+            return None;
+        }
+
+        let new_struct_slot = self.bitmap.as_mut().unwrap().find_first_set();
 
         match new_struct_slot {
             Some(slot) => {
-                self.bitmap.clear(slot);
+                self.bitmap.as_mut().unwrap().clear(slot);
                 Some(slot)
             }
             None => None,
         }
     }
 
-    fn dealloc_slot(&self, idx: usize) {
+    fn dealloc_slot(&mut self, idx: usize) {
+        if self.bitmap.is_none() {
+            return;
+        }
+
         let mut ptr_mem_region = self.phys_base.get().clone();
         ptr_mem_region.inner_inc_by_type::<MemRegionDescr>(idx);
 
@@ -290,7 +298,7 @@ impl TreeAllocator {
         unsafe {
             ptr.write_bytes(ZERO_U8, core::mem::size_of::<MemRegionDescr>());
         }
-        self.bitmap.set(idx);
+        self.bitmap.as_mut().unwrap().set(idx);
     }
 
     // find the region that wastes the least amount of space for the specified size
@@ -646,7 +654,7 @@ impl TreeAllocator {
             let sz = unsafe { hi64(comp_node.unwrap().as_ref()?.key()) as usize };
             block_idx = unsafe { comp_node.unwrap().as_ref()?.value() };
 
-            if addr.is_page_aligned(page_size) && sz >= size {
+            if addr.is_page_aligned_specific(page_size) && sz >= size {
                 // mark the block as allocated
                 mem_regions[block_idx].is_free.set(false);
                 mem_regions[block_idx].owner.set(owner);
@@ -719,7 +727,10 @@ impl TreeAllocator {
 
 impl FrameAllocator for TreeAllocator {
     fn new() -> Self {
-        TreeAllocator {
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::new()");
+
+        let ret = TreeAllocator {
             phys_base: Cell::new(PhysAddr(0)),
             count: Cell::new(0),
             capacity: Cell::new(0),
@@ -732,42 +743,36 @@ impl FrameAllocator for TreeAllocator {
             merge_free_dealloc_count: Cell::new(0),
             merge_free_dealloc_interval: Cell::new(FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC),
 
-            bitmap: Bitmap::new(Owner::Memory),
-        }
+            bitmap: Some(Bitmap::new(Owner::Memory)),            
+        };
+
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::new(): complete");
+
+        ret
     }
 
     fn init(&mut self) {
-        use uefi::table::boot::*;
+
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::init()");
 
         let gb = iron();
 
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::init(): gb = {:#x}", core::ptr::addr_of!(gb) as usize);
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::init(): gb.mem_regions = {:#x}", gb.mem_regions.unwrap_or_else(|| {
+            panic!("mem_regions was null"); }).as_mut_ptr() as usize);
+
         self.phys_base
             .set(raw::ptr_to_raw::<MemRegionDescr, PhysAddr>(
-                gb.mem_regions as *const MemRegionDescr,
+                gb.mem_regions.unwrap() as *const MemRegionDescr,
             ));
         self.capacity.set(gb.total_pages);
 
-        // now we need to go through the memory map one final time and add all the regions
-        // to their respective trees
-        for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_mut().unwrap().entries() } {
-            if e.ty == MemoryType::CONVENTIONAL {
-                self.add_region(
-                    PhysAddr(e.phys_start as usize),
-                    e.page_count as usize * MEMORY_DEFAULT_PAGE_USIZE,
-                    true,
-                    0,
-                    Owner::Nobody,
-                );
-            } else {
-                self.add_region(
-                    PhysAddr(e.phys_start as usize),
-                    e.page_count as usize * MEMORY_DEFAULT_PAGE_USIZE,
-                    false,
-                    0,
-                    Owner::System,
-                );
-            }
-        }
+        #[cfg(debug_assertions)]
+        serial_println!("TreeAllocator::init(): init complete");
     }
 
     // Allocates a single page of memory of the specified size (at the proper alignment)

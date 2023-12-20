@@ -4,6 +4,7 @@ pub use crate::frame_alloc::*;
 use core::slice;
 use core::convert::{From, Into};
 use core::mem;
+use core::fmt;
 
 #[cfg(target_arch = "x86")]
 pub use crate::arch::x86::vmem32::{BasePageTable, PageSize, Vas};
@@ -12,7 +13,7 @@ pub use crate::arch::x86::vmem32::{BasePageTable, PageSize, Vas};
 pub use crate::arch::x86::vmem64::{BasePageTable, PageSize, Vas};
 
 #[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::vmem64::{BasePageTable, PageSize, Vas};
+pub use crate::arch::aa64::vmem64::{BasePageTable, PageSize, Vas};
 
 // CONSTANTS
 pub const MEMORY_TYPE_BOOT_FRAMER: u32 = 0x80015225;
@@ -130,8 +131,31 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
-    fn is_page_aligned(&self, page_size: PageSize) -> bool {
+    fn is_page_aligned_specific(&self, page_size: PageSize) -> bool {
         (self.as_usize() % page_size.into_bits()) == 0
+    }
+
+    fn is_default_page_aligned(&self) -> bool {
+        if self.as_usize() % MEMORY_DEFAULT_PAGE_USIZE == 0 {
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(target_arch = "x86")]
+    fn is_page_aligned_greater_than_default(&self) -> bool {
+        self.as_usize().is_aligned_4m()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn is_page_aligned_greater_than_default(&self) -> bool {
+        self.as_usize().is_aligned_2m() || self.as_usize().is_aligned_1g()
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn is_page_aligned_greater_than_default(&self) -> bool {
+        self.as_usize().is_aligned_16k() || self.as_usize().is_aligned_64k()
     }
 }
 
@@ -204,6 +228,18 @@ impl const MemAddr for PhysAddr {
 
     fn new_from_usize(item: usize) -> Self {
         Self(item as usize)
+    }
+}
+
+impl fmt::LowerHex for PhysAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+impl fmt::UpperHex for PhysAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.0, f)
     }
 }
 
@@ -319,6 +355,18 @@ impl const MemAddr for VirtAddr {
 
     fn new_from_usize(item: usize) -> Self {
         Self(item as usize)
+    }
+}
+
+impl fmt::LowerHex for VirtAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+impl fmt::UpperHex for VirtAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.0, f)
     }
 }
 
@@ -538,6 +586,7 @@ pub mod raw {
     use core::mem;
 
     // our raw memset
+    #[inline(always)]
     pub fn memset_size(start_addr: PhysAddr, size: usize, value: u8) {
         unsafe {
             let base = core::slice::from_raw_parts_mut(start_addr.as_usize() as *mut u8, size);
@@ -548,6 +597,7 @@ pub mod raw {
         }
     }
 
+    #[inline(always)]
     pub fn memset_size_aligned(start_addr: PhysAddr, size: usize, value: usize) {
         let usize_units = size / MACHINE_UBYTES;
 
@@ -561,6 +611,7 @@ pub mod raw {
         }
     }
 
+    #[inline(always)]
     pub fn memset_range_inclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
         let region_size = end_addr.as_usize() - start_addr.as_usize() + 1;
         unsafe {
@@ -573,6 +624,7 @@ pub mod raw {
         }
     }
 
+    #[inline(always)]
     pub fn memset_range_exclusive(start_addr: PhysAddr, end_addr: PhysAddr, value: u8) {
         let region_size = end_addr.as_usize() - start_addr.as_usize();
         unsafe {
@@ -586,6 +638,7 @@ pub mod raw {
     }
 
     // our raw memcpys
+    #[inline(always)]
     pub fn memcpy(src_addr: PhysAddr, dest_addr: PhysAddr, size: usize) {
         unsafe {
             let src = core::slice::from_raw_parts(src_addr.as_usize() as *const u8, size);
@@ -598,6 +651,7 @@ pub mod raw {
     }
 
     // our raw memcpy_aligned
+    #[inline(always)]
     pub fn memcpy_usize_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
         debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);
@@ -617,6 +671,7 @@ pub mod raw {
     }
 
     // our raw memmove
+    #[inline(always)]
     pub fn memmove(src_addr: PhysAddr, dest_addr: PhysAddr, size: usize) {
         unsafe {
             let src = core::slice::from_raw_parts_mut(src_addr.as_usize() as *mut u8, size);
@@ -630,6 +685,7 @@ pub mod raw {
     }
 
     // our raw memmove_aligned
+    #[inline(always)]
     pub fn memmove_usize_aligned(src_addr: PhysAddr, dest_addr: PhysAddr, size_in_bytes: usize) {
         debug_assert!(src_addr.as_usize() % MACHINE_UBYTES == 0);
         debug_assert!(dest_addr.as_usize() % MACHINE_UBYTES == 0);

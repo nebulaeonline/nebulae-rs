@@ -13,7 +13,6 @@ pub use crate::memory::*;
 pub use crate::interrupts::*;
 
 // CONSTANTS
-pub const NEBULAE: usize = 0x5225;
 
 pub mod rust {}
 
@@ -422,7 +421,9 @@ pub mod base {
 
     pub const FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC: usize = 100;
 
-    pub fn iron() -> &'static mut GenesisBlock {
+    pub const NEBULAE: usize = 0x5225;
+    
+    pub fn iron() -> &'static mut Nebulae<'static> {
         let (gb, _, _) = locate_genesis_block();
         gb
     }
