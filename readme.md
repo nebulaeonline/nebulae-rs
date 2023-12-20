@@ -2,6 +2,18 @@
 
 ### Current Status
 
+2023-12-20 Update:
+
+Both x86 & x64 build & run through their paces. aa64 still a WiP.
+
+Boot has been re-tooled to be much cleaner. I wanted it to be tight.
+
+Allocator work continues, but is hopefully nearing the point I can build some parts of std.
+
+Need to verify all vmem routines.
+
+Need to implement testing asap.
+
 2023-12-18 Update:
 
 Nothing building, huge amounts of code movement and churn. Cleaning up little things to make them ergonomic.
