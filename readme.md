@@ -2,6 +2,16 @@
 
 ### Current Status
 
+2023-12-21 Update:
+
+Physical allocator work is almost done. Virtual memory needs an overhaul, and aa64 hardware-specific support needs to be added.
+
+I think this will be a nice plateau to bring feature parity across architectures.
+
+Once parity is achieved, I will begin work on the executable subsystem.
+
+Then the real fun begins.
+
 2023-12-20 Update:
 
 Both x86 & x64 build & run through their paces. aa64 still a WiP.
@@ -64,13 +74,7 @@ But- I can't put it down. I can't stop thinking about it. Every time I think I c
 
 ### Would you change anything about Rust?
 
-I'm glad you asked. Yes I would. I am a big fan of the ideas behind the [Strict Provenance](https://doc.rust-lang.org/std/ptr/index.html#strict-provenance) feature. I believe we should be able to prove a system from top to bottom, but we have to have the language / idioms / tools to make that happen, which unfortunately we don't in bare metal code.
-
-Rust needs a "place" (verb; the action; "to place") command / function / macro / feature. I guess it could be called "sysprovides" or "hardware" or "ISAIDSO". Its purpose would be straightforward, and that would be to establish original provenance of a piece of memory. I want to tell the compiler that "there exists a struct laid out like so at this specific memory address." And I want to do it without transmute or from_raw_parts{_mut}, and I sure as hell don't want to drop to C to do it.
-
-If my hardware spits back a table at memory location 0x5555 when I put 0xabba into register r77 and call the qwijybo instruction, I should be able to tell the compiler about it, and not have to do any super-illegal, out of bounds, instant-UB voodoo to make it work. Frankly, that defeats the whole purpose of a lot of the benefits Rust brings to the table.
-
-PLEASE GIVE ME A METHOD TO ***ESTABLISH*** STRICT PROVENANCE
+Yes, and I will blog about that topic in the near future.
 
 ### Motivation
 The idea here is straightforward, and the same as it's been for a couple of decades: create a microkernel that is ergonomic for personal use, and fast enough so it doesn't feel sluggish.
@@ -79,14 +83,20 @@ The idea here is straightforward, and the same as it's been for a couple of deca
 There are a few that are set in stone:
 
 1. The kernel will have a fixed binary interface for both applications and drivers.
-2. The system will use PE as its executable format.
-3. The kernel will be organized as a hybrid microkernel.
-4. Graphical interfaces will be the primary focus of the system.
-5. Compatibility with existing systems / software / standards is not a primary driver.
+2. The system will use PE as its executable format (secondary formats will be supported).
+3. The kernel will be organized as a hybrid microkernel (involving some VM trickeration).
+4. Graphical interfaces will be the primary focus of the system, although shells will be available.
+5. Compatibility with existing systems / software / standards is not a primary driver (i.e. this is not a POSIX kernel).
 
 ### Goals
 
 My main goal is to write code and share it with the world. I want people to use & enjoy the things I create.
+
+Computers used to be filled with a very accessible sense of wonder, fun & discovery. You could do all sorts of weird things with your computers. They booted to a REPL.
+
+I have a lot of crazy ideas for where this project will go, but I finally have some direction, and some motivation.
+
+The motto here is "create, and help create"
 
 This is not a profit or status driven project. This code has never faced serious scrutiny nor had to withstand a rigorous code review, and it is overly verbose at times (I prefer this style, as I know the vast majority will be optimized away in a release build), but it's here and it works, and you know what they say ;)
 
