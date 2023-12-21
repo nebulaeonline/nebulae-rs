@@ -439,6 +439,11 @@ pub mod base {
     pub const fn align_down(value: usize, multiple: usize) -> usize {
         value - (value % multiple)
     }
+
+    #[inline(always)]
+    pub const fn range_contains(range_start: usize, range_size: usize, target_value: usize) -> bool {
+        target_value >= range_start && target_value < range_start + range_size
+    } 
 }
 
 #[cfg(target_pointer_width = "32")]

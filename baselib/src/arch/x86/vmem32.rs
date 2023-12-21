@@ -120,7 +120,7 @@ impl PageDir for BasePageTable {
         let iron = iron();
 
         #[cfg(debug_assertions)]
-        serial_println!("iron @ {:?}", iron as *const Nebulae as usize);
+        serial_println!("iron @ 0x{:0x}", iron as *const Nebulae as usize);
 
         let new_pd_base = 
             iron.frame_alloc_internal_0_2
@@ -130,12 +130,12 @@ impl PageDir for BasePageTable {
                 .alloc_frame_single(Owner::Memory, PageSize::Small);
 
         #[cfg(debug_assertions)]
-        serial_println!("new_pd_base @ {:?}", new_pd_base);
+        serial_println!("new_pd_base @ 0x{:0x}", new_pd_base);
         
         match new_pd_base {
             None => panic!("Out of memory when allocating for a new pd for a new vas"),
             Some(np) => {
-                serial_println!("new pd @ {:?}", np);
+                serial_println!("new pd @ 0x{:0x}", np);
                 let pd = raw::raw_to_static_ref_mut::<BasePageTable, PhysAddr>(np);
                 pd.identity_map_page(
                     np,

@@ -8,9 +8,9 @@ use core::fmt::Write;
 use uefi::prelude::*;
 use uefi::table::boot::*;
 // Internal Items
-use crate::kernel_statics::*;
 use crate::structures::bitmap::*;
 use crate::common::base::*;
+use crate::kernel_statics::*;
 use crate::cpu::*;
 use crate::frame_alloc::*;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
@@ -96,10 +96,10 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     // }
 
     #[cfg(debug_assertions)]
-    serial_println!("beginning uefi_start() init");
+    serial_println!("beginning kernel_prep() -> init");
 
     #[cfg(debug_assertions)]
-    serial_println!("disabling watchdog");
+    serial_print!("disabling watchdog...");
 
     // disable uefi watchdog timer
     let wd_result = st.boot_services().set_watchdog_timer(
@@ -110,7 +110,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
     // panic if we can't disable the watchdog timer
     if wd_result.is_err() {
-        panic!("Failed to disable UEFI watchdog timer");
+        panic!("failed to disable UEFI watchdog timer");
     }
 
     #[cfg(debug_assertions)]
@@ -250,11 +250,11 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     serial_println!("max conventional address: 0x{:0x}", max_phys_present);
 
     #[cfg(debug_assertions)]
-    serial_println!("beginning memory allocation for physical frame allocator");
+    serial_println!("beginning allocation for physical frame allocator");
 
     //-----------------------------------------------------------------------------------
     
-    // physical allocator
+    // initial memory allocations
 
     // see how many pages we need to track in the physical frame allocator
     let phys_range_page_count = pages::calc_pages_reqd(max_phys_present, PageSize::Small);
@@ -458,22 +458,50 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
     // set up the final bits of gb with the proper structures
     gb.uefi_mem_map_0_1 = Some(mm);
+    
+    // almost there Alice...
+    let gb_sanity: (&'static mut Nebulae<'static>, usize, PhysAddr);
+    {
+        #[cfg(debug_assertions)]
+        serial_println!("testing sanity...");
 
-    // don't do this @ home kids
-    unsafe { UEFI_MEMORY_MAP_0 = gb.uefi_mem_map_0_1.as_ref() };
+        unsafe { UEFI_MEMORY_MAP_0 = Some(gb.uefi_mem_map_0_1.as_ref().unwrap()) };
+        
+        // sanity check
+        gb_sanity = locate_genesis_block();
+    }
 
+    #[cfg(debug_assertions)]
+    serial_println!("genesis block sanity check: 0x{:016x}", gb_sanity.0 as *const Nebulae as usize);
+
+    // make sure gb_sanity matches gb
+    if gb_sanity.0 as *const Nebulae as usize != gb as *const Nebulae as usize {
+        panic!("Genesis block sanity check failed -> expected: 0x{:0x}, actual: 0x{:0x}",
+            gb_sanity.0 as *const Nebulae as usize,
+            gb as *const Nebulae as usize,);
+    }
+
+    #[cfg(debug_assertions)]
+    serial_println!("sane.");
+    
     //-----------------------------------------------------------------------------------
 
     // frame allocator init
 
     #[cfg(debug_assertions)]
-    serial_println!("beginning physical frame allocator init");
+    serial_println!("beginning physical frame allocator bringup & init");
+
+    #[cfg(debug_assertions)]
+    serial_println!("constructing new TreeAllocator for physical frame management");
 
     // set up & initialize the frame allocator
     let mut frame_alloc_temp = gb.frame_alloc_internal_0_2.lock();
     (*frame_alloc_temp) = Some(TreeAllocator::new());
     let frame_alloc = (*frame_alloc_temp).as_mut().unwrap();
     
+    #[cfg(debug_assertions)]
+    serial_println!("wiring bitmap sub-allocator to physical frame allocator");
+
     // wire up the bitmap allocation to the frame allocator
     frame_alloc.bitmap.as_mut().unwrap().bitmap
         .set(Some(raw::abracadabra::<usize>(bitmap_alloc_result.as_ref().unwrap().as_phys())));
@@ -483,13 +511,28 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
             bitmap_alloc_result
                 .as_ref().unwrap().as_phys());
 
-    // wire up the node storage allocation to the frame allocator and then
-    // the node storage to the genesis block
+    #[cfg(debug_assertions)]
+    serial_println!("bitmap sub-allocator wired.");
+
+    #[cfg(debug_assertions)]
+    serial_println!("wiring node storage to physical frame allocator");
+
+    // wire up the bitmap sub-allocator to the frame allocator and then
+    // the node storage to the genesis block, then the genesis block back
+    // to the frame allocator. The bitmap controls the node storage slots,
+    // and the frame allocator owns the bitmap field, thus completing
+    // the cycle (TM)
     frame_alloc.phys_base.set(node_storage_alloc_result.as_ref().unwrap().as_phys());
     gb.mem_regions = Some(raw::abracadabra_array::<MemRegionDescr>(
         node_storage_alloc_result.as_ref().unwrap().as_phys(),
         gb.total_pages,
     ));
+
+    #[cfg(debug_assertions)]
+    serial_println!("node storage wired.");
+
+    #[cfg(debug_assertions)]
+    serial_println!("calling init() on the physical frame allocator (TreeAllocator)");
 
     frame_alloc.init();
 
@@ -516,14 +559,80 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     #[cfg(debug_assertions)]
     serial_println!("physical frame allocator bitmap struct initialized");
 
-    #[cfg(debug_assertions)]
-    serial_println!("initializing physical frame allocator node storage");
-
     // now we need to go through the memory map one final time and add all the regions
     // to their respective trees
     for e in gb.uefi_mem_map_0_1.as_ref().unwrap().entries() {
         if e.phys_start as usize >= gb.phys_mem_max.as_usize() {
             break;
+        }
+
+        // if this range contains our genesis block, treat it specially
+        if range_contains(
+            e.phys_start as usize, 
+            pages::pages_to_bytes(e.page_count as usize, PageSize::Small), 
+            genesis_block.as_usize()) {
+
+            let region_size = pages::pages_to_bytes(e.page_count as usize, PageSize::Small);
+            let gb_idx: usize;
+            let region_idx: usize;
+
+            // we are either splitting the first page off this region
+            // or the last page off this region
+            if genesis_block.as_usize() == e.phys_start as usize {
+                
+                // add the first page off of this region
+                gb_idx = frame_alloc.add_region(
+                    e.phys_start.as_phys(),
+                    PageSize::Small.as_usize(),
+                    false,
+                    0,
+                    Owner::System,
+                ).unwrap();
+
+                // add the rest of this region
+                region_idx = frame_alloc.add_region(
+                    PhysAddr(e.phys_start.as_usize() + PageSize::Small.as_usize()),
+                    region_size - PageSize::Small.as_usize(),
+                    true,
+                    0,
+                    Owner::Nobody,
+                ).unwrap();
+            } else {
+                // split off the last page of this region
+
+                // add the last page
+                gb_idx = frame_alloc.add_region(
+                    PhysAddr(e.phys_start.as_usize() + region_size - PageSize::Small.as_usize()),
+                    PageSize::Small.as_usize(),
+                    false,
+                    0,
+                    Owner::System,
+                ).unwrap();
+
+                // add the rest of this region
+                region_idx = frame_alloc.add_region(
+                    e.phys_start.as_phys(),
+                    region_size - PageSize::Small.as_usize(),
+                    true,
+                    0,
+                    Owner::Nobody,
+                ).unwrap();
+            }
+
+            // page info fields owner and status were just set when
+            // these regions were added to the frame allocator, but
+            // there's still a few fields to set for both memory areas
+
+            // set the genesis block's page info
+            pageinfo[gb_idx].purpose = e.ty;
+            pageinfo[gb_idx].uefi_flags = e.att.bits() as usize;
+
+            // set the region's page info
+            pageinfo[region_idx].purpose = e.ty;
+            pageinfo[region_idx].uefi_flags = e.att.bits() as usize;
+
+            // we should be good with the genesis block now
+            continue;
         }
 
         if e.ty == MemoryType::CONVENTIONAL {
@@ -550,16 +659,14 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
             frame_alloc.add_region(
                 e.phys_start.as_phys(),
-                e.page_count as usize * MEMORY_DEFAULT_PAGE_USIZE,
+                pages::pages_to_bytes(e.page_count.as_usize(), PageSize::Small),
                 false,
                 0,
                 Owner::System,
             );
         }
     }
-
-    #[cfg(debug_assertions)]
-    serial_println!("physical frame allocator node storage initialized");
+    
     #[cfg(debug_assertions)]
     serial_println!("physical frame allocator initialized");
 
@@ -581,7 +688,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     serial_println!("beginning paging init");
 
     #[cfg(debug_assertions)]
-    serial_println!("Initializing kernel VAS");
+    serial_println!("Initializing kernel address space");
 
     // initialize the kernel's virtual address space - x86 & x64
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -590,24 +697,24 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         (*kernel_vas) = Some(Vas::new());
 
         #[cfg(debug_assertions)]
-        serial_println!("base page table created");
+        serial_println!("new base page table instantiated");
 
         #[cfg(debug_assertions)]
-        serial_println!("conjuring base page table");
+        serial_println!("calling new_base() on new base page table");
 
         (*kernel_vas).as_mut().unwrap().base_page_table =
             raw::abracadabra::<BasePageTable>(BasePageTable::new_base());
 
         #[cfg(debug_assertions)]
-        serial_println!("base page table materialized");
+        serial_println!("base page table initialized");
 
         #[cfg(debug_assertions)]
-        serial_println!("identity mapping memory map");
+        serial_print!("identity mapping memory map...");
 
         (*kernel_vas).as_mut().unwrap().identity_map_based_on_memory_map();
 
         #[cfg(debug_assertions)]
-        serial_println!("Memory map identity mapped");
+        serial_println!("memory mapping complete");
 
         #[cfg(debug_assertions)]
         serial_println!("initializing base address register & switching to nebulae VAS");
@@ -682,18 +789,26 @@ pub fn iron_phys_mem_max() -> PhysAddr {
 // returns ptr to block, number of pages in conventional memory, and max phys addr
 // as a PhysAddr
 pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr) {
-    static mut GBI: Option<(&mut Nebulae, usize, PhysAddr)> = None;
+    // Function guard - atomic fuse
+    static mut FUSED_GBI: (AtomicBool, Option<(&mut Nebulae, usize, PhysAddr)>) = (AtomicBool::new(false), None);
 
-    if unsafe { GBI.is_some() } {
-        unsafe {
+    unsafe {
+        if FUSED_GBI.0.load(Ordering::Acquire) {
             return (
-                GBI.as_mut().unwrap().0,
-                GBI.as_ref().unwrap().1,
-                GBI.as_ref().unwrap().2,
+                FUSED_GBI.1.as_mut().unwrap_or_else(|| { panic!("could not obtain nebulae pointer"); })
+                    .0,
+                FUSED_GBI.1.as_mut().unwrap_or_else(|| { panic!("could not obtain conventional memory page count"); })
+                    .1,
+                FUSED_GBI.1.as_mut().unwrap_or_else(|| { panic!("could not obtain max physical address"); })
+                    .2,
             );
+        } else {
+            FUSED_GBI.0.store(true, Ordering::Release);
         }
     }
-
+        
+    //-----------------------------------------------------------------------------------
+    
     let mut largest_conv_block: PhysAddr = usize::MIN.as_phys();
     let mut largest_conv_block_size = 0usize;
     let mut smallest_conv_block: PhysAddr = usize::MAX.as_phys();
@@ -740,7 +855,7 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
     };
 
     unsafe {
-        GBI = Some((
+        FUSED_GBI.1 = Some((
             raw::raw_to_static_ref_mut::<Nebulae, PhysAddr>(genesis_block.as_phys()),
             conv_page_count,
             max_phys_present.as_phys(),

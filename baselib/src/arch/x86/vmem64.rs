@@ -106,12 +106,12 @@ pub type BasePageTable = PageTable;
 impl PageDir for BasePageTable {
     fn new_base() -> PhysAddr {
         #[cfg(debug_assertions)]
-        serial_println!("calling new_base() for a base page table, preparing to allocate a new pml4");
+        serial_println!("BasePageTable::new_base(): -> preparing to allocate a new pml4");
 
         let iron = iron();
 
         #[cfg(debug_assertions)]
-        serial_println!("iron @ {:?}", iron as *const Nebulae as usize);
+        serial_println!("iron @ 0x{:0x}", iron as *const Nebulae as usize);
 
         let new_pml4_base = 
             iron.frame_alloc_internal_0_2
@@ -121,12 +121,12 @@ impl PageDir for BasePageTable {
                 .alloc_frame_single(Owner::Memory, PageSize::Small);
 
         #[cfg(debug_assertions)]
-        serial_println!("new_pml4_base @ {:?}", new_pml4_base);
+        serial_println!("BasePageTable::new_base(): -> new_pml4_base @ 0x{:0x}", new_pml4_base.unwrap());
 
         match new_pml4_base {
             None => panic!("Out of memory when allocating for a new pml4 for a new vas"),
             Some(np) => {
-                serial_println!("new pml4 @ {:?}", np);
+                serial_println!("BasePageTable::new_base(): -> new pml4 @ 0x{:0x}", np);
                 let pml4 = raw::raw_to_static_ref_mut::<BasePageTable, PhysAddr>(np);
                 pml4.identity_map_page(
                     np,

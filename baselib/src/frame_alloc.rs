@@ -203,11 +203,11 @@ impl TreeAllocator {
         let start_page_idx = pages::addr_to_page_index(start_page_base_addr);
         let end_page_idx = pages::usize_to_page_index(start_page_base_addr.as_usize() + size - 1);
 
-        for i in start_page_idx..end_page_idx {
+        for i in start_page_idx..=end_page_idx {
             let page_info = unsafe { iron().page_info.unwrap().as_mut() };
 
             if page_info.is_none() {
-                panic!("Fatal error: page_info is None");
+                panic!("page_info is None in update_page_info_range(). this is a fatal error.");
             }
 
             let pi = page_info.unwrap().as_mut();
@@ -353,7 +353,12 @@ impl TreeAllocator {
                     }
                 }
 
+                // increment our region count
                 self.count.set(self.count.get() + 1);
+
+                // page info range update should be performed when adding
+                // a new region to the tree
+                self.update_page_info_range(start_addr, size, is_free, owner);
 
                 Some(idx)
             }
@@ -381,8 +386,10 @@ impl TreeAllocator {
                 .delete(mem_regions[region_idx].addr_node.get_mut().key());
         }
 
+        // deallocate the region slot we were using (via the bitmap)
         self.dealloc_internal_slot(region_idx);
 
+        // decrement our region count
         self.count.set(self.count.get() - 1);
     }
 
@@ -452,19 +459,19 @@ impl TreeAllocator {
         // get the existing stats
         let region_size = mem_region_array[left_region_idx].size.get();
         let orig_region_start_addr = mem_region_array[left_region_idx].start_addr.get();
-        let new_right_region_size = region_size - new_left_aligned_size;
+        let new_right_aligned_size = region_size - new_left_aligned_size;
 
         // debug output
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::split_free_region(): region_idx = {}", left_region_idx);
+        serial_println!("TreeAllocator::split_free_region(): -> region_idx = {}", left_region_idx);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::split_free_region(): region_size = {}", region_size);
+        serial_println!("TreeAllocator::split_free_region(): -> region_size = {}", region_size);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::split_free_region(): region_start_addr = 0x{:0x}", orig_region_start_addr);
+        serial_println!("TreeAllocator::split_free_region(): -> region_start_addr = 0x{:0x}", orig_region_start_addr);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::split_free_region(): new_left_aligned_size = {}", new_left_aligned_size);
+        serial_println!("TreeAllocator::split_free_region(): -> new_left_aligned_size = {}", new_left_aligned_size);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::split_free_region(): new_right_region_size = {}", new_right_region_size);
+        serial_println!("TreeAllocator::split_free_region(): -> new_right_aligned_size = {}", new_right_aligned_size);
 
         // see if the block is large enough to split
         if region_size - new_left_aligned_size > 0 {
@@ -872,7 +879,7 @@ impl TreeAllocator {
 impl FrameAllocator for TreeAllocator {
     fn new() -> Self {
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::new()");
+        serial_println!("TreeAllocator::new(): -> allocating a new TreeAllocator");
 
         let ret = TreeAllocator {
             phys_base: Cell::new(PhysAddr(0)),
@@ -891,7 +898,7 @@ impl FrameAllocator for TreeAllocator {
         };
 
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::new(): complete");
+        serial_println!("TreeAllocator::new(): -> allocation complete");
 
         ret
     }
@@ -965,35 +972,6 @@ impl FrameAllocator for TreeAllocator {
             return Some(mem_regions[new_block_idx].start_addr.get());
         }
     }
-
-    // superceded
-    // Allocates a single page of memory of the specified size
-    // fn alloc_frame(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr> {
-    //     #[cfg(debug_assertions)]
-    //     serial_println!("entering TreeAllocator::alloc_page()");
-
-    //     let new_alloc = 
-    //         self.alloc_page_aligned_frame(
-    //             page_size.as_usize(),
-    //             page_size, 
-    //             owner);
-
-    //     let mem_regions = self.get_mem_region_array_ref_mut();
-        
-    //     match new_alloc {
-    //         Some(region) => {
-    //             let frame_base_addr = mem_regions[region].start_addr.get();
-    //             #[cfg(debug_assertions)]
-    //             serial_println!("exiting TreeAllocator::alloc_page(): 0x{:0x}", mem_regions[region].start_addr.get());
-    //             return Some(PhysAddr(frame_base_addr));
-    //         },
-    //         None => {
-    //             #[cfg(debug_assertions)]
-    //             serial_println!("exiting TreeAllocator::alloc_page(): NULLPTR");
-    //             return None
-    //         },
-    //     }        
-    // }
 
     // Allocates memory by physical address & size
     fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, owner: Owner, page_size: PageSize) -> Option<PhysAddr> {

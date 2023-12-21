@@ -4,6 +4,8 @@
 
 2023-12-21 Update:
 
+Fixing paging momentarily. The subsystem hasn't been touched through a few rounds of fairy dust sprinkling. It builds but segfaults, so there's some bad juju going on in there.
+
 Physical allocator work is almost done. Virtual memory needs an overhaul, and aa64 hardware-specific support needs to be added.
 
 I think this will be a nice plateau to bring feature parity across architectures.
