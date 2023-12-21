@@ -21,6 +21,9 @@ pub const MEMORY_TYPE_UEFI_MEM_MAP: u32 = 0x80025225;
 pub const MEMORY_TYPE_MEMORY_SUBSYSTEM: u32 = 0x80035225;
 pub const MEMORY_TYPE_BOOT_FRAMER_BITMAP: u32 = 0x80045225;
 
+pub const MEMORY_NATURAL_ALIGN: u64 = 2 * MACHINE_BYTES;
+pub const MEMORY_NATURAL_UALIGN: usize = MEMORY_NATURAL_ALIGN as usize;
+
 // THE REST
 pub trait MemAddr: AsUsize {
     fn inner(&self) -> usize;
@@ -48,9 +51,17 @@ pub trait MemAddr: AsUsize {
     }
 }
 
+pub trait AsPhys {
+    fn as_phys(&self) -> PhysAddr;
+}
+
+pub trait AsVirt {
+    fn as_virt(&self) -> VirtAddr;
+}
+
 impl Bitmask for PhysAddr {
     fn bitmask(&self, mask: usize) -> Self {
-        PhysAddr(ubit::apply_mask(self.0, mask))
+        ubit::apply_mask(self.0, mask).as_phys()
     }
 }
 
@@ -60,22 +71,26 @@ impl AsUsize for PhysAddr {
     }
 }
 
-pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
+pub trait Align: From<usize> + Bitmask + Sized + PartialEq + AsUsize {
+    #[inline(always)]
     fn align_4k(&self) -> Self {
         self.bitmask(ALIGN_MASK_4K)
     }
 
+    #[inline(always)]
     fn is_aligned_4k(&self) -> bool {
         let x = self.align_4k().as_usize();
         let y = self.as_usize();
         x == y
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "aarch64")]
     fn align_16k(&self) -> Self {
         self.bitmask(ALIGN_MASK_16K)
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "aarch64")]
     fn is_aligned_16k(&self) -> bool {
         let x = self.align_16k().as_usize();
@@ -83,11 +98,13 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86_64")]
     fn align_2m(&self) -> Self {
         self.bitmask(ALIGN_MASK_2M)
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86_64")]
     fn is_aligned_2m(&self) -> bool {
         let x = self.align_2m().as_usize();
@@ -95,11 +112,13 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86")]
     fn align_4m(&self) -> Self {
         self.bitmask(ALIGN_MASK_4M)
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86")]
     fn is_aligned_4m(&self) -> bool {
         let x = self.align_4m().as_usize();
@@ -107,11 +126,13 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "aarch64")]
     fn align_64k(&self) -> Self {
         self.bitmask(ALIGN_MASK_64K)
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "aarch64")]
     fn is_aligned_64k(&self) -> bool {
         let x = self.align_64k().as_usize();
@@ -119,11 +140,13 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86_64")]
     fn align_1g(&self) -> Self {
         self.bitmask(ALIGN_MASK_1G)
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "x86_64")]
     fn is_aligned_1g(&self) -> bool {
         let x = self.align_1g().as_usize();
@@ -131,10 +154,7 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         x == y
     }
 
-    fn is_page_aligned_specific(&self, page_size: PageSize) -> bool {
-        (self.as_usize() % page_size.into_bits()) == 0
-    }
-
+    #[inline(always)]
     fn is_default_page_aligned(&self) -> bool {
         if self.as_usize() % MEMORY_DEFAULT_PAGE_USIZE == 0 {
             true
@@ -143,19 +163,36 @@ pub trait Align: Bitmask + Sized + PartialEq + AsUsize {
         }
     }
 
-    #[cfg(target_arch = "x86")]
-    fn is_page_aligned_greater_than_default(&self) -> bool {
-        self.as_usize().is_aligned_4m()
-    }
-
+    #[inline(always)]
     #[cfg(target_arch = "x86_64")]
     fn is_page_aligned_greater_than_default(&self) -> bool {
         self.as_usize().is_aligned_2m() || self.as_usize().is_aligned_1g()
     }
 
+    #[inline(always)]
     #[cfg(target_arch = "aarch64")]
     fn is_page_aligned_greater_than_default(&self) -> bool {
         self.as_usize().is_aligned_16k() || self.as_usize().is_aligned_64k()
+    }
+
+    #[inline(always)]
+    fn align_up(&self, alignment: usize) -> Self {
+        align_up(self.as_usize(), alignment).into()
+    }
+
+    #[inline(always)]
+    fn align_down(&self, alignment: usize) -> Self {
+        align_down(self.as_usize(), alignment).into()
+    }
+
+    #[inline(always)]
+    fn is_aligned(&self, alignment: usize) -> bool {
+        self.as_usize() % alignment == 0
+    }
+
+    #[inline(always)]
+    fn is_default_page_size_aligned(&self) -> bool {
+        self.as_usize() % MEMORY_DEFAULT_PAGE_USIZE == 0
     }
 }
 
@@ -205,11 +242,11 @@ impl PhysAddr {
     }
 
     pub fn inner_inc_by_page_size(&mut self, page_size: PageSize) {
-        self.0 += page_size.into_bits();
+        self.0 += page_size.as_usize();
     }
 
     pub fn inner_dec_by_page_size(&mut self, page_size: PageSize) {
-        self.0 -= page_size.into_bits();
+        self.0 -= page_size.as_usize();
     }
 }
 
@@ -320,11 +357,11 @@ impl VirtAddr {
     }
 
     pub fn inner_inc_by_page_size(&mut self, page_size: PageSize) {
-        self.0 += page_size.into_bits();
+        self.0 += page_size.as_usize();
     }
 
     pub fn inner_dec_by_page_size(&mut self, page_size: PageSize) {
-        self.0 -= page_size.into_bits();
+        self.0 -= page_size.as_usize();
     }
 }
 
@@ -409,6 +446,43 @@ impl core::fmt::Debug for VirtAddr {
     }
 }
 
+impl AsPhys for usize {
+    fn as_phys(&self) -> PhysAddr {
+        PhysAddr(*self)
+    }
+}
+
+impl AsVirt for usize {
+    fn as_virt(&self) -> VirtAddr {
+        VirtAddr(*self)
+    }
+}
+
+#[cfg(target_pointer_width = "32")]
+impl AsPhys for u32 {
+    fn as_phys(&self) -> PhysAddr {
+        PhysAddr(*self as usize)
+    }
+}
+
+#[cfg(target_pointer_width = "32")]
+impl AsVirt for u32 {
+    fn as_virt(&self) -> VirtAddr {
+        VirtAddr(*self as usize)
+    }
+}
+
+impl AsPhys for u64 {
+    fn as_phys(&self) -> PhysAddr {
+        PhysAddr(*self as usize)
+    }
+}
+
+impl AsVirt for u64 {
+    fn as_virt(&self) -> VirtAddr {
+        VirtAddr(*self as usize)
+    }
+}
 // Traits for the virtual memory subsystem
 pub trait PageDir {
     fn new_base() -> PhysAddr;
@@ -454,7 +528,7 @@ pub trait PageDir {
         flags: usize,
         bit_pattern: BitPattern,
     ) -> Option<VirtAddr>;
-    fn alloc_pages_contiguous_fixed(
+    fn alloc_pages_fixed_virtual(
         &mut self,
         size_in_pages: usize,
         v: VirtAddr,
@@ -511,9 +585,9 @@ impl<T: MemAddr + Align + Copy> MemoryUnit<T> {
 
     pub fn page_count(&self, page_size: PageSize) -> usize {
         if self.is_addr_page_aligned(page_size) {
-            self.size / page_size.into_bits()
+            self.size / page_size.as_usize()
         } else {
-            self.size / page_size.into_bits() + 1
+            self.size / page_size.as_usize() + 1
         }
     }
 
@@ -556,8 +630,10 @@ pub trait AddrSpace {
 pub trait FrameAllocator {
     fn new() -> Self;
     fn init(&mut self);
-    fn alloc_page(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
-    fn dealloc_page(&self, page_base: PhysAddr, owner: Owner, page_size: PageSize);
+    fn alloc_frame_single(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
+    fn alloc_frame(&mut self, size: usize, page_size: PageSize, owner: Owner) -> Option<PhysAddr>;
+    fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
+    fn dealloc_frame(&mut self, page_base: PhysAddr, owner: Owner);
     fn free_page_count(&mut self) -> usize;
     fn free_mem_count(&mut self) -> usize;
     fn page_count(&self) -> usize;
@@ -725,28 +801,8 @@ pub mod raw {
         let ptr = unsafe { slice::from_raw_parts_mut::<T>(addr as *mut T, count) };
         
         // zero the slice
-        raw::memset_size(PhysAddr::from(addr), count * mem::size_of::<T>(), 0);
+        raw::memset_size(addr.as_phys(), count * mem::size_of::<T>(), 0);
         ptr
-    }
-
-    // ref to an address
-    #[inline(always)]
-    pub fn ref_to_raw<T, AT: MemAddr + From<usize>>(reff: &T) -> AT {
-        let addr = unsafe { mem::transmute::<&T, usize>(reff) };
-        AT::from(addr)
-    }
-
-    // ref to a usize address
-    #[inline(always)]
-    pub fn ref_to_usize<T>(reff: &T) -> usize {
-        unsafe { mem::transmute::<&T, usize>(reff) }
-    }
-
-    // mut ptr to an address
-    #[inline(always)]
-    pub fn ptr_mut_to_raw<T, AT: MemAddr + From<usize>>(reff: *mut T) -> AT {
-        let addr = unsafe { mem::transmute::<*mut T, usize>(reff) };
-        AT::from(addr)
     }
 
     // mut ptr to a usize address
@@ -814,12 +870,13 @@ pub mod pages {
         pub owner: Owner,
         pub purpose: MemoryType,
         pub flags: usize,
+        pub page_size: PageSize,
     }
 
     // calculate the amount of memory given the number of default sized pages
     #[inline(always)]
-    pub const fn pages_to_bytes(page_count: usize) -> usize {
-        page_count * MEMORY_DEFAULT_PAGE_USIZE
+    pub const fn pages_to_bytes(page_count: usize, page_size: PageSize) -> usize {
+        page_count * page_size.into_bits()
     }
 
     // calculates the number of pages given the number of bytes and the page size

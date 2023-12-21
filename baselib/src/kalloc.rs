@@ -1,6 +1,5 @@
 use crate::structures::bitmap::*;
 use crate::common::base::*;
-use crate::kernel_statics::*;
 
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;
@@ -83,7 +82,7 @@ impl MemoryPool {
                 .base_page_table
                 .as_mut()
                 .unwrap()
-                .alloc_pages_contiguous_fixed(
+                .alloc_pages_fixed_virtual(
                     pages::calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
                     self.start,
                     Owner::System,
@@ -100,7 +99,7 @@ impl MemoryPool {
             return contiguous;
         } else {
             let nc = unsafe {
-                KERNEL_BASE_VAS_4
+                iron().base_vas_0_5
                     .lock()
                     .as_mut()
                     .unwrap()
@@ -170,7 +169,7 @@ impl SubAllocator for MemoryPool {
         if free_idx.is_some() {
             let free_addr = self.start.as_usize() + (free_idx.unwrap() * self.block_size);
             self.bitmap.clear(free_idx.unwrap());
-            return Some(VirtAddr(free_addr));
+            return Some(free_addr.as_virt());
         } else {
             return None;
         }
@@ -181,7 +180,7 @@ impl SubAllocator for MemoryPool {
         self.bitmap.set(dealloc_idx);
 
         // clear the memory
-        let dealloc_begin = raw::ptr_mut_to_usize::<u8>(ptr);
+        let dealloc_begin = ptr as usize;
         let dealloc_end = dealloc_begin + layout.size();
         for i in dealloc_begin..dealloc_end {
             unsafe { core::ptr::write_volatile(i as *mut u8, 0) };

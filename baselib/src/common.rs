@@ -134,12 +134,12 @@ pub mod bit {
         }
 
         pub fn calc_bitindex_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
-            (calc_bitindex_size_in_bytes(capacity) + page_size.into_bits() - 1)
-                / page_size.into_bits()
+            (calc_bitindex_size_in_bytes(capacity) + page_size.as_usize() - 1)
+                / page_size.as_usize()
         }
 
         pub fn calc_wasted_bytes_in_pages(capacity: usize, page_size: PageSize) -> usize {
-            calc_bitindex_size_in_pages(capacity, page_size) * page_size.into_bits()
+            calc_bitindex_size_in_pages(capacity, page_size) * page_size.as_usize()
                 - calc_bitindex_size_in_bytes(capacity)
         }
 

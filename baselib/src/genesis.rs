@@ -43,7 +43,7 @@ impl<'a> Nebulae<'a> {
             genesis_ptr: None,
             conv_pages: 0,
             total_pages: 0,
-            phys_mem_max: PhysAddr::from(0usize),
+            phys_mem_max: 0usize.as_phys(),
             page_info: None,
             page_info_max: 0,
             mem_regions: None,
@@ -127,9 +127,9 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     #[cfg(debug_assertions)]
     serial_println!("beginning genesis block init");
 
-    let mut largest_conv_block: PhysAddr = PhysAddr::from(usize::MIN);
+    let mut largest_conv_block: PhysAddr = usize::MIN.as_phys();
     let mut largest_conv_block_size = 0usize;
-    let mut smallest_conv_block: PhysAddr = PhysAddr::from(usize::MAX);
+    let mut smallest_conv_block: PhysAddr = usize::MAX.as_phys();
     let mut smallest_conv_block_size = usize::MAX;
     let mut conv_page_count: usize = 0usize;
     let mut max_phys_present: usize = 0;
@@ -160,7 +160,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     // we are going to do some allocations, and uefi always seems
     // to report a smaller map than exit_boot_services() needs anyway,
     // let's allocate an extra page if there's not 25 entries free
-    if pages::pages_to_bytes(mm_size_in_pages) - mm_size_struct.map_size < 25 * mem::size_of::<MemoryDescriptor>() {
+    if pages::pages_to_bytes(mm_size_in_pages, PageSize::Small) - mm_size_struct.map_size < 25 * mem::size_of::<MemoryDescriptor>() {
         mm_size_in_pages += 1;
     }
     
@@ -182,17 +182,17 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         // allocation via uefi was successful, so get the memory map
 
         // store the base address of our allocated memory
-        let buf_addr = PhysAddr::from(mm_alloc_result.unwrap().as_usize());
+        let buf_addr = mm_alloc_result.unwrap().as_phys();
 
         // zero the memory to be used for the memory map
-        raw::memset_size_aligned(buf_addr, pages::pages_to_bytes(mm_size_in_pages), 0);
+        raw::memset_size_aligned(buf_addr, pages::pages_to_bytes(mm_size_in_pages, PageSize::Small), 0);
 
         // yes, these buffers point to the same place-
         // but sometimes uefi is finicky and we need to try twice.
         // I don't want to actually allocate twice, so we'll just
         // use the same buffer twice.
-        let buf = raw::abracadabra_array::<u8>(buf_addr, pages::pages_to_bytes(mm_size_in_pages));
-        let buf2 = raw::abracadabra_array::<u8>(buf_addr, pages::pages_to_bytes(mm_size_in_pages));
+        let buf = raw::abracadabra_array::<u8>(buf_addr, pages::pages_to_bytes(mm_size_in_pages, PageSize::Small));
+        let buf2 = raw::abracadabra_array::<u8>(buf_addr, pages::pages_to_bytes(mm_size_in_pages, PageSize::Small));
 
         let uefi_result = 
             st.boot_services().memory_map(unsafe { buf.as_mut().unwrap() });
@@ -200,7 +200,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         if uefi_result.is_err() {
             // try one more time to get the map
             // clean up the buffer first
-            raw::memset_size_aligned(buf_addr, pages::pages_to_bytes(mm_size_in_pages), 0);
+            raw::memset_size_aligned(buf_addr, pages::pages_to_bytes(mm_size_in_pages, PageSize::Small), 0);
             
             let uefi_try2 = 
                 st.boot_services().memory_map(unsafe { buf2.as_mut().unwrap() });
@@ -231,16 +231,16 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         // we are only interested in conventional memory
         // for deciding on a genesis block
         if e.ty == MemoryType::CONVENTIONAL {
-            max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize);
+            max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize, PageSize::Small);
 
             conv_page_count += e.page_count.as_usize();
-            let pb = pages::pages_to_bytes(e.page_count.as_usize());
+            let pb = pages::pages_to_bytes(e.page_count.as_usize(), PageSize::Small);
             if pb > largest_conv_block_size {
-                largest_conv_block = PhysAddr::from(e.phys_start);
+                largest_conv_block = e.phys_start.as_phys();
                 largest_conv_block_size = pb;
             }
             if pb < smallest_conv_block_size {
-                smallest_conv_block = PhysAddr::from(e.phys_start);
+                smallest_conv_block = e.phys_start.as_phys();
                 smallest_conv_block_size = pb;
             }
         }
@@ -251,6 +251,10 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
     #[cfg(debug_assertions)]
     serial_println!("beginning memory allocation for physical frame allocator");
+
+    //-----------------------------------------------------------------------------------
+    
+    // physical allocator
 
     // see how many pages we need to track in the physical frame allocator
     let phys_range_page_count = pages::calc_pages_reqd(max_phys_present, PageSize::Small);
@@ -311,7 +315,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         panic!("Failed to allocate memory for memory info");
     } else {
         #[cfg(debug_assertions)]
-        serial_println!("recording memory info");        
+        serial_println!("memory allocated for memory info structs");        
     }
 
     #[cfg(debug_assertions)]
@@ -354,13 +358,13 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         // we are only interested in conventional memory
         // for deciding on a genesis block
         if e.ty == MemoryType::CONVENTIONAL {
-            let pb = pages::pages_to_bytes(e.page_count.as_usize());
+            let pb = pages::pages_to_bytes(e.page_count.as_usize(), PageSize::Small);
             if pb > largest_conv_block_size {
-                largest_conv_block = PhysAddr::from(e.phys_start);
+                largest_conv_block = e.phys_start.as_phys();
                 largest_conv_block_size = pb;
             }
             if pb < smallest_conv_block_size {
-                smallest_conv_block = PhysAddr::from(e.phys_start);
+                smallest_conv_block = e.phys_start.as_phys();
                 smallest_conv_block_size = pb;
             }
         }
@@ -377,7 +381,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         // otherwise, we need to see if the largest block's base address is page aligned
         // if it is, then we need to grab the last page from the smallest block
         // if it isn't, then we can grab the first page from the largest block
-        if largest_conv_block.is_page_aligned_specific(PageSize::Small) {
+        if largest_conv_block.is_aligned(PageSize::Small.into_bits()) {
             PhysAddr(align_down(
                 smallest_conv_block.as_usize() + smallest_conv_block_size - 1,
                 MEMORY_DEFAULT_PAGE_USIZE,
@@ -406,19 +410,23 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     gb.total_pages = phys_range_page_count;
     gb.phys_mem_max = PhysAddr(max_phys_present.as_usize());
 
+    //-----------------------------------------------------------------------------------
+
+    // memory structures init
+
     #[cfg(debug_assertions)]
     serial_println!("beginning base allocator config");
 
     // write the page info structs with default info
 
-    // get the address of the buffer allocated for page info structs
-    let pageinfo_addr = PhysAddr(page_info_alloc_result.unwrap().as_usize());
+    // get the physical address of the buffer allocated for page info structs
+    let pageinfo_addr = page_info_alloc_result.unwrap().as_phys();
     
     #[cfg(debug_assertions)]
     serial_println!("zeroing memory for page info structs");
 
     // zero the allocated memory
-    raw::memset_size_aligned(pageinfo_addr, pages::pages_to_bytes(page_info_pages_reqd), 0);
+    raw::memset_size_aligned(pageinfo_addr, pages::pages_to_bytes(page_info_pages_reqd, PageSize::Small), 0);
     
     #[cfg(debug_assertions)]
     serial_println!("memory zeroed for page info structs");
@@ -429,7 +437,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     gb.page_info = 
         Some(raw::abracadabra_array::<pages::PageInfo>(pageinfo_addr, gb.total_pages));
     let pageinfo = unsafe { gb.page_info.unwrap().as_mut().unwrap() };
-    let mut p = PhysAddr(0usize);
+    let mut p = 0usize.as_phys();
 
     for i in 0..gb.total_pages {
         pageinfo[i] = pages::PageInfo {
@@ -440,6 +448,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
             owner: Owner::Nobody,
             purpose: MemoryType::CONVENTIONAL,
             flags: 0usize,
+            page_size: PageSize::Small,
         };
         p.inner_inc_by_page_size(PageSize::Small);
     }
@@ -453,6 +462,10 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     // don't do this @ home kids
     unsafe { UEFI_MEMORY_MAP_0 = gb.uefi_mem_map_0_1.as_ref() };
 
+    //-----------------------------------------------------------------------------------
+
+    // frame allocator init
+
     #[cfg(debug_assertions)]
     serial_println!("beginning physical frame allocator init");
 
@@ -463,22 +476,25 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     
     // wire up the bitmap allocation to the frame allocator
     frame_alloc.bitmap.as_mut().unwrap().bitmap
-        .set(Some(raw::abracadabra::<usize>(PhysAddr::from(bitmap_alloc_result.as_ref().unwrap().as_usize()))));
+        .set(Some(raw::abracadabra::<usize>(bitmap_alloc_result.as_ref().unwrap().as_phys())));
     frame_alloc.bitmap.as_mut().unwrap()
         .init_phys_fixed(
             gb.total_pages, 
-            PhysAddr::from(bitmap_alloc_result
-                .as_ref().unwrap().as_usize()));
+            bitmap_alloc_result
+                .as_ref().unwrap().as_phys());
 
     // wire up the node storage allocation to the frame allocator and then
     // the node storage to the genesis block
-    frame_alloc.phys_base.set(PhysAddr(node_storage_alloc_result.as_ref().unwrap().as_usize()));
+    frame_alloc.phys_base.set(node_storage_alloc_result.as_ref().unwrap().as_phys());
     gb.mem_regions = Some(raw::abracadabra_array::<MemRegionDescr>(
-        PhysAddr(node_storage_alloc_result.as_ref().unwrap().as_usize()),
+        node_storage_alloc_result.as_ref().unwrap().as_phys(),
         gb.total_pages,
     ));
 
     frame_alloc.init();
+
+    // unlock the frame allocator
+    unsafe { gb.frame_alloc_internal_0_2.force_unlock() };
 
     #[cfg(debug_assertions)]
     serial_println!("physical frame allocator initialized");
@@ -489,8 +505,8 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     // initialize the bitmap (remember, our bitmaps are used in
     // reverse when used in the context of free/allocated items)
     raw::memset_size_aligned(
-        PhysAddr::from(bitmap_alloc_result.as_ref().unwrap().as_usize()),
-        pages::pages_to_bytes(bitmap_pages_reqd),
+        bitmap_alloc_result.as_ref().unwrap().as_phys(),
+        pages::pages_to_bytes(bitmap_pages_reqd, PageSize::Small),
         usize::MAX,
     );
 
@@ -512,14 +528,14 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
         if e.ty == MemoryType::CONVENTIONAL {
             frame_alloc.add_region(
-                PhysAddr(e.phys_start as usize),
+                e.phys_start.as_phys(),
                 e.page_count as usize * MEMORY_DEFAULT_PAGE_USIZE,
                 true,
                 0,
                 Owner::Nobody,
             );
         } else {
-            let mut frame_addr: PhysAddr = PhysAddr::from(e.phys_start);
+            let mut frame_addr: PhysAddr = e.phys_start.as_phys();
 
             for _i in 0..e.page_count as usize {
                 let frame_idx = pages::usize_to_page_index(frame_addr.as_usize());
@@ -533,7 +549,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
             }
 
             frame_alloc.add_region(
-                PhysAddr(e.phys_start as usize),
+                e.phys_start.as_phys(),
                 e.page_count as usize * MEMORY_DEFAULT_PAGE_USIZE,
                 false,
                 0,
@@ -553,6 +569,62 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     // init exception handling
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     exceptions_init();
+
+    #[cfg(debug_assertions)]
+    serial_println!("exception handling enabled");
+
+    //-----------------------------------------------------------------------------------
+
+    // paging init
+
+    #[cfg(debug_assertions)]
+    serial_println!("beginning paging init");
+
+    #[cfg(debug_assertions)]
+    serial_println!("Initializing kernel VAS");
+
+    // initialize the kernel's virtual address space - x86 & x64
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        let mut kernel_vas = gb.base_vas_0_5.lock();
+        (*kernel_vas) = Some(Vas::new());
+
+        #[cfg(debug_assertions)]
+        serial_println!("base page table created");
+
+        #[cfg(debug_assertions)]
+        serial_println!("conjuring base page table");
+
+        (*kernel_vas).as_mut().unwrap().base_page_table =
+            raw::abracadabra::<BasePageTable>(BasePageTable::new_base());
+
+        #[cfg(debug_assertions)]
+        serial_println!("base page table materialized");
+
+        #[cfg(debug_assertions)]
+        serial_println!("identity mapping memory map");
+
+        (*kernel_vas).as_mut().unwrap().identity_map_based_on_memory_map();
+
+        #[cfg(debug_assertions)]
+        serial_println!("Memory map identity mapped");
+
+        #[cfg(debug_assertions)]
+        serial_println!("initializing base address register & switching to nebulae VAS");
+
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        _ = (*kernel_vas).as_mut().unwrap().init_cr3();
+
+        // switch address spaces
+        (*kernel_vas).as_mut().unwrap().switch_to();
+
+        #[cfg(debug_assertions)]
+        serial_println!("welcome to nebulae.");
+    }
+
+    //-----------------------------------------------------------------------------------
+
+    // fin.
 
     // see how many free pages we have after bootstrapping the memory manager
     {
@@ -622,25 +694,25 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
         }
     }
 
-    let mut largest_conv_block: PhysAddr = PhysAddr::from(usize::MIN);
+    let mut largest_conv_block: PhysAddr = usize::MIN.as_phys();
     let mut largest_conv_block_size = 0usize;
-    let mut smallest_conv_block: PhysAddr = PhysAddr::from(usize::MAX);
+    let mut smallest_conv_block: PhysAddr = usize::MAX.as_phys();
     let mut smallest_conv_block_size = usize::MAX;
     let mut conv_page_count: usize = 0usize;
     let mut max_phys_present: usize = 0;
 
     for e in unsafe { UEFI_MEMORY_MAP_0.unwrap().entries() } {
         if e.ty == MemoryType::CONVENTIONAL {
-            max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize);
+            max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize, PageSize::Small);
 
             conv_page_count += e.page_count.as_usize();
-            let pb = pages::pages_to_bytes(e.page_count.as_usize());
+            let pb = pages::pages_to_bytes(e.page_count.as_usize(), PageSize::Small);
             if pb > largest_conv_block_size {
-                largest_conv_block = PhysAddr::from(e.phys_start);
+                largest_conv_block = e.phys_start.as_phys();
                 largest_conv_block_size = pb;
             }
             if pb < smallest_conv_block_size {
-                smallest_conv_block = PhysAddr::from(e.phys_start);
+                smallest_conv_block = e.phys_start.as_phys();
                 smallest_conv_block_size = pb;
             }
         }
@@ -657,7 +729,7 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
         // otherwise, we need to see if the largest block's base address is page aligned
         // if it is, then we need to grab the last page from the smallest block
         // if it isn't, then we can grab the first page from the largest block
-        if largest_conv_block.is_page_aligned_specific(PageSize::Small) {
+        if largest_conv_block.is_aligned(PageSize::Small.into_bits()) {
             align_down(
                 smallest_conv_block.as_usize() + smallest_conv_block_size - 1,
                 MEMORY_DEFAULT_PAGE_USIZE,
@@ -669,15 +741,15 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
 
     unsafe {
         GBI = Some((
-            raw::raw_to_static_ref_mut::<Nebulae, PhysAddr>(PhysAddr::from(genesis_block)),
+            raw::raw_to_static_ref_mut::<Nebulae, PhysAddr>(genesis_block.as_phys()),
             conv_page_count,
-            PhysAddr::from(max_phys_present),
+            max_phys_present.as_phys(),
         ));
     }
 
     (
-        raw::raw_to_static_ref_mut(PhysAddr::from(genesis_block)),
+        raw::raw_to_static_ref_mut(genesis_block.as_phys()),
         conv_page_count,
-        PhysAddr::from(max_phys_present),
+        max_phys_present.as_phys(),
     )
 }

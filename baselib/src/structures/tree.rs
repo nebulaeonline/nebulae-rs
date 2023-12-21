@@ -57,7 +57,7 @@ pub mod red_black {
             unsafe { (*node).n() }
         }
 
-        pub fn min(&self) -> u128 {
+        pub fn min_key(&self) -> u128 {
             unsafe {
                 match self.min_node(self.root()).as_ref() {
                     Some(node) => (*node).key(),
@@ -495,32 +495,6 @@ pub mod red_black {
             }
         }
 
-        pub fn print_tree_color(&self) {
-            self.print_tree_color_node(self.root(), 0);
-        }
-
-        pub fn print_tree_color_node(&self, node: *mut T, indent: usize) {
-            if node == core::ptr::null_mut() {
-                return;
-            }
-            unsafe {
-                self.print_tree_color_node((*node).right(), indent + 1);
-                for _ in 0..indent {
-                    serial_print!("  ");
-                }
-                if (*node).color() == COLOR_RED {
-                    serial_println!("{} {}", (*node).key(), (*node).value() as usize);
-                } else {
-                    serial_println!(
-                        "\x1b[1;30m{} {}\x1b[0m",
-                        (*node).key(),
-                        (*node).value() as usize
-                    );
-                }
-                self.print_tree_color_node((*node).left(), indent + 1);
-            }
-        }
-
         pub fn print_tree_size(&self) {
             self.print_tree_size_node(self.root(), 0);
         }
@@ -536,38 +510,6 @@ pub mod red_black {
                 }
                 serial_println!("{} {}", (*node).key(), (*node).value() as usize);
                 self.print_tree_size_node((*node).left(), indent + 1);
-            }
-        }
-
-        pub fn print_tree_size_color(&self) {
-            self.print_tree_size_color_node(self.root(), 0);
-        }
-
-        pub fn print_tree_size_color_node(&self, node: *mut T, indent: usize) {
-            if node == core::ptr::null_mut() {
-                return;
-            }
-            unsafe {
-                self.print_tree_size_color_node((*node).right(), indent + 1);
-                for _ in 0..indent {
-                    serial_print!("  ");
-                }
-                if (*node).color() == COLOR_RED {
-                    serial_println!(
-                        "{} {} {}",
-                        (*node).key(),
-                        (*node).value() as usize,
-                        (*node).n()
-                    );
-                } else {
-                    serial_println!(
-                        "\x1b[1;30m{} {} {}\x1b[0m",
-                        (*node).key(),
-                        (*node).value() as usize,
-                        (*node).n()
-                    );
-                }
-                self.print_tree_size_color_node((*node).left(), indent + 1);
             }
         }
     }

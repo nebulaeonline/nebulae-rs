@@ -1,5 +1,4 @@
 use crate::common::base::*;
-use crate::kernel_statics::*;
 
 use core::cell::Cell;
 use core::ops::Range;
@@ -161,14 +160,14 @@ impl BitmapOps for Bitmap {
         let size_in_bytes = bitindex::calc_bitindex_size_in_bytes(item_cap);
         let size_in_pages = pages::calc_pages_reqd(size_in_bytes, PageSize::Small);
 
-        // we will first try to get contiguous memory for the bitmap.
+        // we will allocate contiguous memory for the bitmap.
         let iron = iron();
 
         let bitmap_phys_alloc = 
             iron.frame_alloc_internal_0_2
                 .lock().as_mut()
                 .unwrap()
-                .alloc_default_pages(size_in_bytes, Owner::System);
+                .alloc_frame(size_in_bytes, PageSize::Small, self.owner.get());
 
         if bitmap_phys_alloc.is_some() {
             // we were able to successfully allocate contiguous memory for the bitmap
@@ -186,7 +185,7 @@ impl BitmapOps for Bitmap {
                         .as_mut()
                         .unwrap()
                         .identity_map_page(
-                            PhysAddr(i),
+                            i.as_phys(),
                             self.owner.get(),
                             PageSize::Small,
                             PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
@@ -206,7 +205,7 @@ impl BitmapOps for Bitmap {
         self.size_in_bytes.set(size_in_bytes);
 
         self.typ.set(BitmapTyp::PhysFrame);
-        let bitmap_phys_base = PhysAddr(bitmap_phys_alloc.unwrap().as_usize());
+        let bitmap_phys_base = bitmap_phys_alloc.unwrap();
         self.bitmap.set(Some(raw::abracadabra::<usize>(bitmap_phys_base)));
 
         true
@@ -237,7 +236,7 @@ impl BitmapOps for Bitmap {
                 iron.frame_alloc_internal_0_2.lock()
                 .as_mut()
                 .unwrap()
-                .alloc_default_pages(size_in_bytes, Owner::System);
+                .alloc_frame(size_in_bytes, PageSize::Small, self.owner.get());
 
         if bitmap_phys_alloc.is_some() {
             // we were able to successfully allocate contiguous memory for the bitmap
@@ -255,7 +254,7 @@ impl BitmapOps for Bitmap {
                         .as_mut()
                         .unwrap()
                         .map_page(
-                            PhysAddr(i),
+                            i.as_phys(),
                             virt_base,
                             self.owner.get(),
                             PageSize::Small,
@@ -274,7 +273,7 @@ impl BitmapOps for Bitmap {
                         .lock()
                         .as_mut()
                         .unwrap()
-                        .alloc_page(Owner::System, PageSize::Small);
+                        .alloc_frame_single(Owner::Memory, PageSize::Small);
 
                 if page_base.is_some() {
                     allocated_pages += 1;
@@ -323,10 +322,9 @@ impl BitmapOps for Bitmap {
 
                             iron.base_vas_0_5.force_unlock();
 
-                            iron.frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_page(
+                            iron.frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
                                 phys_page,
                                 Owner::System,
-                                PageSize::Small,
                             );
                         }
                         virt_base.inner_inc_by_page_size(PageSize::Small);
@@ -336,7 +334,7 @@ impl BitmapOps for Bitmap {
             }
         }
 
-        let bitmap_phys_base = PhysAddr(bitmap_phys_alloc.unwrap().as_usize());
+        let bitmap_phys_base = bitmap_phys_alloc.unwrap();
         self.bitmap.set(Some(raw::abracadabra::<usize>(bitmap_phys_base)));
 
         self.capacity_in_units.set(item_cap);
@@ -360,14 +358,14 @@ impl BitmapOps for Bitmap {
         let size_in_pages = pages::calc_pages_reqd(size_in_bytes, PageSize::Small);
 
         let raw_alloc = unsafe {
-            KERNEL_BASE_VAS_4
+            iron().base_vas_0_5
                 .lock()
-                .as_mut()
+                .as_ref()
                 .unwrap()
                 .base_page_table
                 .as_mut()
                 .unwrap()
-                .alloc_pages_contiguous_fixed(
+                .alloc_pages_fixed_virtual(
                     size_in_pages,
                     base_addr,
                     self.owner.get(),
@@ -378,7 +376,7 @@ impl BitmapOps for Bitmap {
         };
 
         if raw_alloc.is_some() {
-            let bitmap_virt_base = VirtAddr(raw_alloc.unwrap().as_usize());
+            let bitmap_virt_base = raw_alloc.unwrap();
             self.bitmap
                 .set(Some(raw::abracadabra::<usize>(bitmap_virt_base)));
         } else {

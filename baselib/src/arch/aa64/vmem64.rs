@@ -1,7 +1,6 @@
 use uefi::table::boot::MemoryType;
 
 use crate::common::base::*;
-use crate::kernel_statics::*;
 
 use core::ptr;
 
@@ -24,7 +23,9 @@ impl Vas {
     pub fn switch_to(&mut self) {}
 
     pub fn identity_map_based_on_memory_map(&mut self) {
-        for e in unsafe { UEFI_MEMORY_MAP_1.lock().as_ref().unwrap().entries() } {
+        let gb = iron();
+
+        for e in unsafe { gb.uefi_mem_map_0_1.as_ref().unwrap().entries() } {
             if e.ty != MemoryType::CONVENTIONAL {
                 for i in 0..e.page_count as usize {
                     let page_start = e.phys_start as usize + (i * MEMORY_DEFAULT_PAGE_USIZE);

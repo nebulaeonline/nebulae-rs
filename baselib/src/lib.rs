@@ -9,6 +9,7 @@
 #![feature(type_alias_impl_trait)]
 // #![feature(generic_const_exprs)]
 #![feature(slice_ptr_get)]
+#![feature(strict_provenance)]
 
 // baselib mods
 pub mod common;
