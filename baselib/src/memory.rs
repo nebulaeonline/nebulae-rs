@@ -6,11 +6,8 @@ use core::convert::{From, Into};
 use core::mem;
 use core::fmt;
 
-#[cfg(target_arch = "x86")]
-pub use crate::arch::x86::vmem32::{BasePageTable, PageSize, Vas};
-
-#[cfg(target_arch = "x86_64")]
-pub use crate::arch::x86::vmem64::{BasePageTable, PageSize, Vas};
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub use crate::arch::x86::vmem::{BasePageTable, PageSize, Vas};
 
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aa64::vmem64::{BasePageTable, PageSize, Vas};
@@ -624,15 +621,14 @@ impl BitPattern {
 pub trait AddrSpace {
     fn new() -> Self;
     fn switch_to(&mut self);
-    fn identity_map_based_on_memory_map(&mut self);
+    fn identity_map_critical(&mut self);
 }
 
 pub trait FrameAllocator {
     fn new() -> Self;
     fn init(&mut self);
-    fn alloc_frame_single(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
     fn alloc_frame(&mut self, size: usize, page_size: PageSize, owner: Owner) -> Option<PhysAddr>;
-    fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, owner: Owner, page_size: PageSize) -> Option<PhysAddr>;
+    fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, page_size: PageSize, owner: Owner) -> Option<PhysAddr>;
     fn dealloc_frame(&mut self, page_base: PhysAddr, owner: Owner);
     fn free_page_count(&mut self) -> usize;
     fn free_mem_count(&mut self) -> usize;
@@ -740,7 +736,7 @@ pub mod raw {
             let dest =
                 core::slice::from_raw_parts_mut(dest_addr.as_usize() as *mut usize, size_in_usize);
 
-            for i in 0..size_in_bytes {
+            for i in 0..size_in_usize {
                 dest[i] = src[i];
             }
         }
@@ -805,17 +801,48 @@ pub mod raw {
         ptr
     }
 
+    // address to ref
+    #[inline(always)]
+    pub fn abracadabra_static_ref<T> (addr: impl MemAddr + From<usize> + AsUsize) -> &'static T {
+        unsafe { mem::transmute::<usize, &'static T>(addr.as_usize()) }
+    }
+
+    // address to mutable ref - type args are ref type and address type being passed
+    #[inline(always)]
+    pub fn abracadabra_static_ref_mut<T>(addr: impl MemAddr + From<usize> + AsUsize) -> &'static mut T {
+        unsafe { mem::transmute::<usize, &'static mut T>(addr.as_usize()) }
+    }
+
+    // address to const pointer
+    #[inline(always)]
+    pub fn abracadabra_ptr_const<T, AT: MemAddr + From<usize> + AsUsize>(addr: AT) -> *const T {
+        unsafe { mem::transmute::<usize, *const T>(addr.as_usize()) }
+    }
+
+    // address to mutable pointer
+    #[inline(always)]
+    pub fn abracadabra_ptr_mut<T, AT: MemAddr + From<usize> + AsUsize>(addr: AT) -> *mut T {
+        unsafe { mem::transmute::<usize, *mut T>(addr.as_usize()) }
+    }
+
     // mut ptr to a usize address
     #[inline(always)]
     pub fn ptr_mut_to_usize<T>(reff: *mut T) -> usize {
         unsafe { mem::transmute::<*mut T, usize>(reff) }
     }
 
-    // ptr to an address
+    // ptr to a phys address
     #[inline(always)]
-    pub fn ptr_to_raw<T, AT: MemAddr + From<usize>>(reff: *const T) -> AT {
+    pub fn ptr_to_phys<T>(reff: *const T) -> PhysAddr {
         let addr = unsafe { mem::transmute::<*const T, usize>(reff) };
-        AT::from(addr)
+        PhysAddr::from(addr)
+    }
+
+    // ptr to a virt address
+    #[inline(always)]
+    pub fn ptr_to_virt<T>(reff: *const T) -> VirtAddr {
+        let addr = unsafe { mem::transmute::<*const T, usize>(reff) };
+        VirtAddr::from(addr)
     }
 
     // ptr to a usize address
@@ -824,85 +851,31 @@ pub mod raw {
         unsafe { mem::transmute::<*const T, usize>(reff) }
     }
 
-    // address to ref
+    // ref to an address
     #[inline(always)]
-    pub fn raw_to_static_ref<T, AT: MemAddr + From<usize>>(addr: AT) -> &'static T {
-        unsafe { mem::transmute::<usize, &'static T>(addr.as_usize()) }
+    pub fn ptr_to_raw<T, AT: MemAddr + From<usize> + AsUsize>(reff: *const T) -> AT {
+        let addr = unsafe { mem::transmute::<*const T, usize>(reff) };
+        AT::from(addr)
     }
 
-    // address to mutable ref
+    // ref to an address
     #[inline(always)]
-    pub fn raw_to_static_ref_mut<T, AT: MemAddr>(addr: AT) -> &'static mut T {
-        unsafe { mem::transmute::<usize, &'static mut T>(addr.as_usize()) }
+    pub fn ptr_mut_to_raw<T, AT: MemAddr + From<usize> + AsUsize>(reff: *mut T) -> AT {
+        let addr = unsafe { mem::transmute::<*mut T, usize>(reff) };
+        AT::from(addr)
     }
 
-    // address to const pointer
+    // ref to an address
     #[inline(always)]
-    pub fn raw_to_ptr<T, AT: MemAddr>(addr: AT) -> *const T {
-        unsafe { mem::transmute::<usize, *const T>(addr.as_usize()) }
+    pub fn ref_to_raw<T, AT: MemAddr + From<usize> + AsUsize>(reff: &T) -> AT {
+        let addr = unsafe { mem::transmute::<&T, usize>(reff) };
+        AT::from(addr)
     }
 
-    // address to mutable pointer
+    // ref to an address
     #[inline(always)]
-    pub fn raw_to_ptr_mut<T, AT: MemAddr>(addr: AT) -> *mut T {
-        unsafe { mem::transmute::<usize, *mut T>(addr.as_usize()) }
-    }
-}
-
-pub mod pages {
-    use super::*;
-    use uefi::table::boot::*;
-
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    #[repr(C)]
-    pub enum PageStatus {
-        Free,
-        Reserved,
-        Alloc,
-    }
-
-    #[repr(C)]
-    pub struct PageInfo {
-        pub phys_base: PhysAddr,
-        pub size: usize,
-        pub uefi_flags: usize,
-        pub status: PageStatus,
-        pub owner: Owner,
-        pub purpose: MemoryType,
-        pub flags: usize,
-        pub page_size: PageSize,
-    }
-
-    // calculate the amount of memory given the number of default sized pages
-    #[inline(always)]
-    pub const fn pages_to_bytes(page_count: usize, page_size: PageSize) -> usize {
-        page_count * page_size.into_bits()
-    }
-
-    // calculates the number of pages given the number of bytes and the page size
-    // returns true if the number of bytes is evenly divisible by the specified page size
-    // returns false otherwise
-    #[inline(always)]
-    pub const fn bytes_to_pages(bytes: usize, page_size: PageSize) -> (usize, bool) {
-        let page_count = (bytes + page_size.into_bits() - 1) / page_size.into_bits();
-        let remainder = bytes % MEMORY_DEFAULT_PAGE_USIZE;
-
-        (page_count, remainder == 0)
-    }
-
-    pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
-        (size + page_size.into_bits() - 1) / page_size.into_bits()
-    }
-
-    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
-    #[inline(always)]
-    pub const fn usize_to_page_index(raw: usize) -> usize {
-        raw >> MEMORY_DEFAULT_SHIFT
-    }
-
-    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
-    #[inline(always)]
-    pub fn addr_to_page_index(addr: impl MemAddr + AsUsize + Sized) -> usize {
-        addr.as_usize() >> MEMORY_DEFAULT_SHIFT
-    }
+    pub fn ref_mut_to_raw<T, AT: MemAddr + From<usize> + AsUsize>(reff: &mut T) -> AT {
+        let addr = unsafe { mem::transmute::<&T, usize>(reff) };
+        AT::from(addr)
+    }    
 }

@@ -1,6 +1,8 @@
 use crate::structures::bitmap::*;
 use crate::common::base::*;
 
+use crate::arch::x86::vmem::*;
+
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;
 
@@ -74,7 +76,7 @@ impl MemoryPool {
 
     pub fn init(&mut self) -> Option<VirtAddr> {
         // first try and allocate contiguous memory, then fall back to non-contiguous
-        let contiguous = unsafe {
+        let contiguous = {
             iron().base_vas_0_5
                 .lock()
                 .as_mut()
@@ -98,7 +100,7 @@ impl MemoryPool {
             self.bitmap.set_all();
             return contiguous;
         } else {
-            let nc = unsafe {
+            let nc = {
                 iron().base_vas_0_5
                     .lock()
                     .as_mut()

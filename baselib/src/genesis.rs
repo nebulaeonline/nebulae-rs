@@ -15,6 +15,8 @@ use crate::cpu::*;
 use crate::frame_alloc::*;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 use crate::interrupts::*;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+use crate::arch::x86::vmem::*;
 
 #[repr(C)]
 pub struct Nebulae<'a> {
@@ -31,7 +33,7 @@ pub struct Nebulae<'a> {
     pub frame_alloc_internal_0_2: spin::Mutex<Option<TreeAllocator>>,
     pub frame_alloc_0_3: spin::Mutex<bool>,
     pub base_vas_internal_0_4: spin::Mutex<bool>,
-    pub base_vas_0_5: spin::Mutex<Option<Vas>>,
+    pub base_vas_0_5: spin::Mutex<Option<Vas<'a>>>,
 }
 impl<'a> Nebulae<'a> {
     
@@ -403,7 +405,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
     // set the basic kernel table parameters
     gb.magic = NEBULAE;
-    gb.genesis_ptr = Some(raw::raw_to_static_ref_mut::<Nebulae, PhysAddr>(PhysAddr::from(
+    gb.genesis_ptr = Some(raw::abracadabra_static_ref_mut::<Nebulae>(PhysAddr::from(
         gb as *mut Nebulae as usize),
     ));
     gb.conv_pages = conv_page_count;
@@ -465,7 +467,7 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         #[cfg(debug_assertions)]
         serial_println!("testing sanity...");
 
-        unsafe { UEFI_MEMORY_MAP_0 = Some(gb.uefi_mem_map_0_1.as_ref().unwrap()) };
+        unsafe { UEFI_MEMORY_MAP = Some(gb.uefi_mem_map_0_1.as_ref().unwrap()) };
         
         // sanity check
         gb_sanity = locate_genesis_block();
@@ -538,9 +540,6 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
 
     // unlock the frame allocator
     unsafe { gb.frame_alloc_internal_0_2.force_unlock() };
-
-    #[cfg(debug_assertions)]
-    serial_println!("physical frame allocator initialized");
 
     #[cfg(debug_assertions)]
     serial_println!("clearing the physical frame allocator bitmap");
@@ -697,27 +696,27 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
         (*kernel_vas) = Some(Vas::new());
 
         #[cfg(debug_assertions)]
-        serial_println!("new base page table instantiated");
+        serial_println!("new base page table instantiated.");
 
         #[cfg(debug_assertions)]
-        serial_println!("calling new_base() on new base page table");
+        serial_println!("calling new_base() on new base page table.");
 
         (*kernel_vas).as_mut().unwrap().base_page_table =
-            raw::abracadabra::<BasePageTable>(BasePageTable::new_base());
+            unsafe { Some(raw::abracadabra::<BasePageTable>(BasePageTable::new_base()).as_mut().unwrap()) };
 
         #[cfg(debug_assertions)]
-        serial_println!("base page table initialized");
+        serial_println!("base page table initialized.");
 
         #[cfg(debug_assertions)]
-        serial_print!("identity mapping memory map...");
+        serial_print!("identity mapping critical system memory.");
 
-        (*kernel_vas).as_mut().unwrap().identity_map_based_on_memory_map();
-
-        #[cfg(debug_assertions)]
-        serial_println!("memory mapping complete");
+        (*kernel_vas).as_mut().unwrap().identity_map_critical();
 
         #[cfg(debug_assertions)]
-        serial_println!("initializing base address register & switching to nebulae VAS");
+        serial_println!("identity mapping complete.");
+
+        #[cfg(debug_assertions)]
+        serial_println!("initializing base address register & switching to nebulae address space");
 
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         _ = (*kernel_vas).as_mut().unwrap().init_cr3();
@@ -816,7 +815,7 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
     let mut conv_page_count: usize = 0usize;
     let mut max_phys_present: usize = 0;
 
-    for e in unsafe { UEFI_MEMORY_MAP_0.unwrap().entries() } {
+    for e in unsafe { UEFI_MEMORY_MAP.unwrap().entries() } {
         if e.ty == MemoryType::CONVENTIONAL {
             max_phys_present = e.phys_start as usize + pages::pages_to_bytes(e.page_count as usize, PageSize::Small);
 
@@ -856,14 +855,14 @@ pub fn locate_genesis_block() -> (&'static mut Nebulae<'static>, usize, PhysAddr
 
     unsafe {
         FUSED_GBI.1 = Some((
-            raw::raw_to_static_ref_mut::<Nebulae, PhysAddr>(genesis_block.as_phys()),
+            raw::abracadabra_static_ref_mut::<Nebulae>(genesis_block.as_phys()),
             conv_page_count,
             max_phys_present.as_phys(),
         ));
     }
 
     (
-        raw::raw_to_static_ref_mut(genesis_block.as_phys()),
+        raw::abracadabra_static_ref_mut(genesis_block.as_phys()),
         conv_page_count,
         max_phys_present.as_phys(),
     )

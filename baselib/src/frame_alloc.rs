@@ -5,6 +5,8 @@ use crate::structures::bitmap::*;
 use crate::common::base::*;
 use crate::structures::tree::red_black::*;
 
+use crate::arch::x86::vmem::*;
+
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MemNode {
@@ -162,12 +164,12 @@ impl MemRegionDescr {
     }
 
     // returns a pointer to the size node
-    pub fn size_tree_node_ptr(&mut self) -> &mut MemNode {
+    pub fn size_node_ptr(&mut self) -> &mut MemNode {
         self.size_node.get_mut()
     }
 
     // returns a pointer to the address node
-    pub fn addr_tree_node_ptr(&mut self) -> &mut MemNode {
+    pub fn addr_node_ptr(&mut self) -> &mut MemNode {
         self.addr_node.get_mut()
     }
 }
@@ -285,7 +287,7 @@ impl TreeAllocator {
                 }
 
                 // update the root node
-                free_addr_cur = (*mem_regions[merged_region_result.unwrap()].addr_tree_node_ptr()).left();
+                free_addr_cur = (*mem_regions[merged_region_result.unwrap()].addr_node_ptr()).left();
 
                 // increment our merge count
                 merge_count += 1;
@@ -330,7 +332,7 @@ impl TreeAllocator {
                 mem_regions[idx].idx.set(idx);
 
                 {
-                    let size_node = mem_regions[idx].size_tree_node_ptr();
+                    let size_node = mem_regions[idx].size_node_ptr();
                     size_node.set_value(idx);
                     size_node.set_key(make128(size, start_addr.as_usize()));
 
@@ -342,7 +344,7 @@ impl TreeAllocator {
                 }
 
                 {
-                    let addr_node = mem_regions[idx].addr_tree_node_ptr();
+                    let addr_node = mem_regions[idx].addr_node_ptr();
                     addr_node.set_value(idx);
                     addr_node.set_key(make128(start_addr.as_usize(), size));
 
@@ -397,7 +399,7 @@ impl TreeAllocator {
     fn get_mem_region_array_ref_mut(&self) -> &'static mut [MemRegionDescr] {
         unsafe {
             core::slice::from_raw_parts_mut(
-                raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(self.phys_base.get()),
+                raw::abracadabra_ptr_mut::<MemRegionDescr, PhysAddr>(self.phys_base.get()),
                 self.capacity.get(),
             )
         }
@@ -429,7 +431,7 @@ impl TreeAllocator {
         let mut ptr_mem_region = self.phys_base.get().clone();
         ptr_mem_region.inner_inc_by_type::<MemRegionDescr>(idx);
 
-        let ptr = raw::raw_to_ptr_mut::<MemRegionDescr, PhysAddr>(ptr_mem_region);
+        let ptr = raw::abracadabra_ptr_mut::<MemRegionDescr, PhysAddr>(ptr_mem_region);
         unsafe {
             ptr.write_bytes(ZERO_U8, core::mem::size_of::<MemRegionDescr>());
         }
@@ -481,34 +483,18 @@ impl TreeAllocator {
             // obtain an index for the new region into the memory region array;
             // the memory region array is controlled by the bitmap
             let new_right_region = self.alloc_internal_slot();
-            
+
             // make sure we were able to allocate a new region slot
             match new_right_region {
                 Some(right_region_idx) => {
-                    // remove the old region from each tree, update the key/value, 
-                    // and add it back to each tree
                     
-                    // the size trunk first
-                    {
-                        let size_node = mem_region_array[left_region_idx].size_tree_node_ptr();
-                        let trunk = self.rb_size_free.get_mut();
+                    // get some stats
+                    let new_right_region_size = region_size - new_left_aligned_size;
+                    let new_right_region_start_addr = orig_region_start_addr.as_usize() + new_left_aligned_size;
 
-                        trunk.delete(size_node.key());
-                        size_node.set_value(left_region_idx);
-                        size_node.set_key(make128(new_left_aligned_size, orig_region_start_addr.as_usize()));
-                        trunk.put(size_node);
-                    }
-
-                    // then the address trunk
-                    {
-                        let addr_node = mem_region_array[left_region_idx].addr_tree_node_ptr();
-                        let trunk = self.rb_addr_free.get_mut();
-
-                        trunk.delete(addr_node.key());
-                        addr_node.set_value(left_region_idx);
-                        addr_node.set_key(make128(orig_region_start_addr.as_usize(), new_left_aligned_size));
-                        trunk.put(addr_node);
-                    }
+                    // remove the left region from each tree, update the key/value, 
+                    // and add it back to each tree
+                    self.remove_region_from_free_trunks(right_region_idx);
 
                     // update the left region entry
                     mem_region_array[left_region_idx].size.set(new_left_aligned_size);
@@ -527,17 +513,17 @@ impl TreeAllocator {
                     // update the newly created right region's entry
                     mem_region_array[right_region_idx]
                         .start_addr
-                        .set(PhysAddr(orig_region_start_addr.as_usize() + new_left_aligned_size));
+                        .set(PhysAddr(new_right_region_start_addr));
 
-                    mem_region_array[right_region_idx].size.set(region_size - new_left_aligned_size);
+                    mem_region_array[right_region_idx].size.set(new_right_region_size);
                     mem_region_array[right_region_idx].is_free.set(true);
                     mem_region_array[right_region_idx].owner.set(Owner::Nobody);
                     mem_region_array[right_region_idx].idx.set(right_region_idx);
 
                     // update the right region's page entries
                     self.update_page_info_range(
-                        PhysAddr(orig_region_start_addr.as_usize() + new_left_aligned_size.as_usize()),
-                        region_size - new_left_aligned_size,
+                        PhysAddr(new_right_region_start_addr),
+                        new_right_region_size,
                         true,
                         Owner::Nobody,
                     );
@@ -546,22 +532,22 @@ impl TreeAllocator {
 
                     // first to the size trunk
                     {
-                        let size_node = mem_region_array[right_region_idx].size_tree_node_ptr();
+                        let size_node = mem_region_array[right_region_idx].size_node_ptr();
                         size_node.value.set(right_region_idx);
                         size_node.key.set(make128(
-                            region_size - new_left_aligned_size,
-                            orig_region_start_addr.as_usize() + new_left_aligned_size,
+                            new_right_region_size,
+                            new_right_region_start_addr,
                         ));
                         self.rb_size_free.get_mut().put(size_node);
                     }
 
                     // then to the address trunk
                     {
-                        let addr_node = mem_region_array[right_region_idx].addr_tree_node_ptr();
+                        let addr_node = mem_region_array[right_region_idx].addr_node_ptr();
                         addr_node.value.set(right_region_idx);
                         addr_node.key.set(make128(
-                            orig_region_start_addr.as_usize() + new_left_aligned_size,
-                            region_size - new_left_aligned_size,
+                            new_right_region_start_addr,
+                            new_right_region_size,
                         ));
                         self.rb_addr_free.get_mut().put(addr_node);
                     }
@@ -584,19 +570,19 @@ impl TreeAllocator {
     }
 
     // remove a region from the free trunks
-    fn remove_region_from_free_trunk(&mut self, region_idx: usize) {
+    fn remove_region_from_free_trunks(&mut self, region_idx: usize) {
         debug_assert!(region_idx < self.capacity.get());
 
         let mem_regions = self.get_mem_region_array_ref_mut();
 
         {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
+            let size_node = mem_regions[region_idx].size_node_ptr();
             let size_trunk = self.rb_size_free.get_mut();
             size_trunk.delete(size_node.key());
         }
         
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
             let addr_trunk = self.rb_addr_free.get_mut();
             addr_trunk.delete(addr_node.key());
         }        
@@ -610,13 +596,13 @@ impl TreeAllocator {
         let mem_regions = self.get_mem_region_array_ref_mut();
 
         {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
+            let size_node = mem_regions[region_idx].size_node_ptr();
             let size_trunk = self.rb_size_alloc.get_mut();
             size_trunk.delete(size_node.key());
         }
         
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
             let addr_trunk = self.rb_addr_alloc.get_mut();
             addr_trunk.delete(addr_node.key());
         }        
@@ -631,7 +617,7 @@ impl TreeAllocator {
         let region_start_addr = mem_regions[region_idx].start_addr.get();
 
         {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
+            let size_node = mem_regions[region_idx].size_node_ptr();
             
             size_node.value.set(region_idx);
             size_node.key.set(make128(region_size, region_start_addr.as_usize()));
@@ -641,7 +627,7 @@ impl TreeAllocator {
         }
 
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
 
             addr_node.value.set(region_idx);
             addr_node.key.set(make128(region_start_addr.as_usize(), region_size));
@@ -662,7 +648,7 @@ impl TreeAllocator {
 
         
         {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
+            let size_node = mem_regions[region_idx].size_node_ptr();
             size_node.value.set(region_idx);
             size_node.key.set(make128(region_size, region_start_addr.as_usize()));
 
@@ -671,7 +657,7 @@ impl TreeAllocator {
         }
 
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
             addr_node.value.set(region_idx);
             addr_node.key.set(make128(region_start_addr.as_usize(), region_size));
 
@@ -695,8 +681,8 @@ impl TreeAllocator {
         }
 
         // remove the regions from each trunk
-        self.remove_region_from_free_trunk(left_region_idx);
-        self.remove_region_from_free_trunk(right_region_idx);
+        self.remove_region_from_free_trunks(left_region_idx);
+        self.remove_region_from_free_trunks(right_region_idx);
 
         // update the left region entry (this will be the new merged region)
         let new_region_size = mem_regions[left_region_idx].size.get() + mem_regions[right_region_idx].size.get();
@@ -711,13 +697,13 @@ impl TreeAllocator {
 
         // update the info on the left region's tree nodes
         {
-            let size_node = mem_regions[left_region_idx].size_tree_node_ptr();
+            let size_node = mem_regions[left_region_idx].size_node_ptr();
             size_node.value.set(left_region_idx);
             size_node.key.set(make128(new_region_size, region_start_addr.as_usize()));
         }
 
         {
-            let addr_node = mem_regions[left_region_idx].addr_tree_node_ptr();
+            let addr_node = mem_regions[left_region_idx].addr_node_ptr();
             addr_node.value.set(left_region_idx);
             addr_node.key.set(make128(region_start_addr.as_usize(), new_region_size));
         }        
@@ -758,7 +744,7 @@ impl TreeAllocator {
 
         // see if the region is already allocated
         // if it is, then we don't need to do anything
-        if mem_regions[region_idx].is_free.get() == false {
+        if !mem_regions[region_idx].is_free.get() {
             return;
         }
 
@@ -771,49 +757,24 @@ impl TreeAllocator {
         // always remove the region from the trees before making
         // any changes to the region's keys, otherwise the rb tree
         // will be corrupted
-        {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
-            let size_free_trunk = self.rb_size_free.get_mut();
-            let size_alloc_trunk = self.rb_size_alloc.get_mut();
 
-            size_free_trunk.delete(size_node.key.get());
+        // remove the region from the free trunks
+        self.remove_region_from_free_trunks(region_idx);
+
+        // update key/value for size trunk node
+        {
+            let size_node = mem_regions[region_idx].size_node_ptr();
             size_node.value.set(region_idx);
-            size_node.key.set(make128(region_size, region_start_addr.as_usize()));
-            size_alloc_trunk.put(size_node);
+            size_node.key.set(make128(region_size, region_start_addr.as_usize()));            
         }
 
+        // update key/value for address trunk node
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
-            let addr_free_trunk = self.rb_addr_free.get_mut();
-            let addr_alloc_trunk = self.rb_addr_alloc.get_mut();
-
-            addr_free_trunk.delete(addr_node.key.get());
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
             addr_node.value.set(region_idx);
-            addr_node.key.set(make128(region_start_addr.as_usize(), region_size));
-            addr_alloc_trunk.put(addr_node);
+            addr_node.key.set(make128(region_start_addr.as_usize(), region_size));            
         }
-        {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
-            let size_free_trunk = self.rb_size_free.get_mut();
-            let size_alloc_trunk = self.rb_size_alloc.get_mut();
-
-            size_free_trunk.delete(size_node.key.get());
-            size_node.value.set(region_idx);
-            size_node.key.set(make128(region_size, region_start_addr.as_usize()));
-            size_alloc_trunk.put(size_node);
-        }
-
-        {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
-            let addr_free_trunk = self.rb_addr_free.get_mut();
-            let addr_alloc_trunk = self.rb_addr_alloc.get_mut();
-
-            addr_free_trunk.delete(addr_node.key.get());
-            addr_node.value.set(region_idx);
-            addr_node.key.set(make128(region_start_addr.as_usize(), region_size));
-            addr_alloc_trunk.put(addr_node);
-        }
-
+        
         // update the page info structs
         self.update_page_info_range(region_start_addr, region_size, false, owner);
     }
@@ -827,49 +788,44 @@ impl TreeAllocator {
             panic!("region_idx out of bounds");
         }
 
-        // make sure the owners match
-        if mem_regions[region_idx].owner.get() != owner {
+        // see if the region is already free
+        // if it is, then we don't need to do anything
+        if mem_regions[region_idx].is_free.get() {
             return false;
         }
 
-        // see if the region is already allocated
-        // if it isn't, then we don't need to do anything
-        if mem_regions[region_idx].is_free.get() {
-            return true;
+        // make sure the owner is correct
+        if mem_regions[region_idx].owner.get() != owner {
+            return false;
         }
 
         let region_size = mem_regions[region_idx].size.get();
         let region_start_addr = mem_regions[region_idx].start_addr.get();
 
         mem_regions[region_idx].is_free.set(true);
-        mem_regions[region_idx].owner.set(Owner::Nobody);
+        mem_regions[region_idx].owner.set(owner);
 
         // always remove the region from the trees before making
-        // any changes to the region's keys, otherwise the rb trees
+        // any changes to the region's keys, otherwise the rb tree
         // will be corrupted
 
-        {
-            let size_node = mem_regions[region_idx].size_tree_node_ptr();
-            let size_free_trunk = self.rb_size_free.get_mut();
-            let size_alloc_trunk = self.rb_size_alloc.get_mut();
+        // remove the region from the alloc trunks
+        self.remove_region_from_alloc_trunks(region_idx);
 
-            size_alloc_trunk.delete(size_node.key.get());
+        // update key/value for size trunk node
+        {
+            let size_node = mem_regions[region_idx].size_node_ptr();
             size_node.value.set(region_idx);
-            size_node.key.set(make128(region_size, region_start_addr.as_usize()));
-            size_free_trunk.put(size_node);
+            size_node.key.set(make128(region_size, region_start_addr.as_usize()));            
         }
 
+        // update key/value for address trunk node
         {
-            let addr_node = mem_regions[region_idx].addr_tree_node_ptr();
-            let addr_free_trunk = self.rb_addr_free.get_mut();
-            let addr_alloc_trunk = self.rb_addr_alloc.get_mut();
-
-            addr_alloc_trunk.delete(addr_node.key.get());
+            let addr_node = mem_regions[region_idx].addr_node_ptr();
             addr_node.value.set(region_idx);
-            addr_node.key.set(make128(region_start_addr.as_usize(), region_size));
-            addr_free_trunk.put(addr_node);
+            addr_node.key.set(make128(region_start_addr.as_usize(), region_size));            
         }
-
+        
         // update the page info structs
         self.update_page_info_range(region_start_addr, region_size, true, Owner::Nobody);
         true
@@ -911,9 +867,9 @@ impl FrameAllocator for TreeAllocator {
         let gb = iron();
 
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::init(): gb = {:#x}", gb as *const Nebulae as usize);
+        serial_println!("TreeAllocator::init(): iron @ {:#x}", gb as *const Nebulae as usize);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::init(): gb.mem_regions = {:#x}", gb.mem_regions.unwrap_or_else(|| {
+        serial_println!("TreeAllocator::init(): mem region descriptors @ {:#x}", gb.mem_regions.unwrap_or_else(|| {
             panic!("mem_regions was null"); }).as_mut_ptr() as usize);
 
         self.phys_base
@@ -926,55 +882,8 @@ impl FrameAllocator for TreeAllocator {
         serial_println!("TreeAllocator::init(): init complete");
     }
 
-    // find the region that wastes the least amount of space for the specified size
-    // if there's any more space than MEMORY_MAX_WASTE, split the region
-    fn alloc_frame_single(&mut self, owner: Owner, page_size: PageSize) -> Option<PhysAddr> {
-        
-        let aligned_size = page_size.as_usize();
-
-        let new_block = self.rb_size_free.get_mut().ceiling_node(make128(aligned_size, 0));
-                
-        // if we are allocating larger than the default page frame size, then we 
-        // need to coalesce the free space
-        if page_size.as_usize() > MEMORY_DEFAULT_PAGE_USIZE {
-            self.coalesce_free_space();
-        }
-
-        // allocate the block, splitting as necessary
-        let new_block_idx = unsafe { new_block.unwrap().as_ref()?.value() };
-       
-        // see if we found a block that will work
-
-        // tap into our memory region array
-        let mem_regions = self.get_mem_region_array_ref_mut();
-
-        // grab the stats of this memory region
-        let block_size = mem_regions[new_block_idx].size.get();
-
-        // see if the block is large enough to split
-        if block_size - aligned_size > 0 {
-            
-            // split the block; the original block will be the left block with the new size
-            // the right block will be added to the free trunks
-            let (left_node_idx, _right_node_idx) =
-                self.split_free_region(new_block_idx, aligned_size)
-                    .unwrap_or_else(|| {
-                        panic!("memory region split failed. this is a fatal error.");
-                    });
-            
-            // allocate the left block
-            self.mark_region_allocated(left_node_idx, owner);
-            return Some(mem_regions[left_node_idx].start_addr.get());
-        } else {
-            // the block is too small to split, but it will work
-            // mark the region as allocated
-            self.mark_region_allocated(new_block_idx, owner);
-            return Some(mem_regions[new_block_idx].start_addr.get());
-        }
-    }
-
     // Allocates memory by physical address & size
-    fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, owner: Owner, page_size: PageSize) -> Option<PhysAddr> {
+    fn alloc_frame_fixed(&mut self, phys_addr: PhysAddr, size: usize, page_size: PageSize, owner: Owner) -> Option<PhysAddr> {
         
         debug_assert!(phys_addr.is_aligned(page_size.as_usize()));
         debug_assert!(size.is_aligned(page_size.as_usize()));
@@ -1057,18 +966,30 @@ impl FrameAllocator for TreeAllocator {
                             containing_node_region_idx, 
                             size_in_bytes)
                             .unwrap_or_else(|| {
-                                panic!("memory region split failed. this is a fatal error.");
+                                panic!("TreeAllocator::alloc_frame_fixed() -> memory region split failed. this is a fatal error.");
                             });
 
                     // mark the region as allocated
                     self.mark_region_allocated(left_node_idx, owner);
+
+                    // zero the new block
+                    raw::memset_size_aligned(
+                        mem_regions[left_node_idx].start_addr.get(),
+                        aligned_size,
+                        0usize,
+                    );
                 } else {
                     // the region and the allocation request are the same size;
                     // mark the region as allocated
                     self.mark_region_allocated(containing_node_region_idx, owner);
+
+                    // zero the new block
+                    raw::memset_size_aligned(
+                        mem_regions[containing_node_region_idx].start_addr.get(),
+                        aligned_size,
+                        0usize,
+                    );
                 }
-                // mark the region as allocated
-                self.mark_region_allocated(containing_node_region_idx, owner);                               
             } else {
                 // get a new region slot
                 let new_region = self.alloc_internal_slot();
@@ -1082,7 +1003,7 @@ impl FrameAllocator for TreeAllocator {
                 let (_left_node_idx, right_node_idx) = 
                     self.split_free_region(containing_node_region_idx, phys_addr_offset)
                         .unwrap_or_else(|| {
-                            panic!("memory region split failed. this is a fatal error.");
+                            panic!("TreeAllocator::alloc_frame_fixed() -> memory region split failed. this is a fatal error.");
                         });
 
                 // get the stats of the new region
@@ -1097,14 +1018,28 @@ impl FrameAllocator for TreeAllocator {
                             right_node_idx, 
                             size_in_bytes)
                             .unwrap_or_else(|| {
-                                panic!("memory region split failed. this is a fatal error.");
+                                panic!("TreeAllocator::alloc_frame_fixed() -> secondary memory region split failed. this is a fatal error.");
                             });
 
                     // mark the region as allocated
                     self.mark_region_allocated(left_node_idx_2, owner);
+
+                    // zero the new block
+                    raw::memset_size_aligned(
+                        mem_regions[left_node_idx_2].start_addr.get(),
+                        aligned_size,
+                        0usize,
+                    );
                 } else {
                     // mark the region as allocated
                     self.mark_region_allocated(containing_node_region_idx, owner);
+
+                    // zero the new block
+                    raw::memset_size_aligned(
+                        mem_regions[containing_node_region_idx].start_addr.get(),
+                        aligned_size,
+                        0usize,
+                    );
                 }
             }            
         }
@@ -1135,11 +1070,11 @@ impl FrameAllocator for TreeAllocator {
         let mut comp_node = self.rb_size_free.get_mut().ceiling_node(size_key);
 
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::alloc_page_aligned(): size = {}", aligned_size);
+        serial_println!("TreeAllocator::alloc_frame(): size = {}", aligned_size);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::alloc_page_aligned(): size_key = 0x{:0x}", size_key);
+        serial_println!("TreeAllocator::alloc_frame(): size_key = 0x{:0x}", size_key);
         #[cfg(debug_assertions)]
-        serial_println!("TreeAllocator::alloc_page_aligned(): comp_node = 0x{:0x}", unsafe { comp_node.unwrap().as_ref()?.key() });
+        serial_println!("TreeAllocator::alloc_frame(): comp_node = 0x{:0x}", unsafe { comp_node.unwrap().as_ref()?.key() });
 
         while comp_node.is_some() {
             let addr = unsafe { lo64(comp_node.unwrap().as_ref()?.key()) as usize };
@@ -1154,6 +1089,15 @@ impl FrameAllocator for TreeAllocator {
                     // mark the block as allocated
                     self.mark_region_allocated(block_idx, owner);
 
+                    // zero the new block
+                    raw::memset_size_aligned(
+                        mem_regions[block_idx].start_addr.get(),
+                        aligned_size,
+                        0usize,
+                    );
+
+                    return Some(mem_regions[block_idx].start_addr.get());
+
                 } else {
 
                     // split the block
@@ -1163,6 +1107,13 @@ impl FrameAllocator for TreeAllocator {
                     match nodes_opt {
                         Some((left_node_idx, _right_node_idx)) => {
                             self.mark_region_allocated(left_node_idx, owner);
+
+                            // zero the new block
+                            raw::memset_size_aligned(
+                                mem_regions[left_node_idx].start_addr.get(),
+                                aligned_size,
+                                0usize,
+                            );
                             return Some(mem_regions[left_node_idx].start_addr.get());
                         }
                         None => {
@@ -1185,6 +1136,8 @@ impl FrameAllocator for TreeAllocator {
 
                     match nodes_opt {
 
+                        // the left region will be what we trimmed to meet alignment requirements
+                        // so we're only interested in the right region
                         Some((_, right_node_idx)) => {
                             
                             // see if we need to split the block again
@@ -1196,6 +1149,14 @@ impl FrameAllocator for TreeAllocator {
                                 match nodes_opt2 {
                                     Some((left_node_idx2, _)) => {
                                         self.mark_region_allocated(left_node_idx2, owner);
+
+                                        // zero the new block
+                                        raw::memset_size_aligned(
+                                            mem_regions[left_node_idx2].start_addr.get(),
+                                            aligned_size,
+                                            0usize,
+                                        );
+                                        
                                         return Some(mem_regions[left_node_idx2].start_addr.get());
                                     }
                                     None => {
@@ -1206,6 +1167,14 @@ impl FrameAllocator for TreeAllocator {
                                 // the block is too small to split, but it will work
                                 // mark the region as allocated
                                 self.mark_region_allocated(right_node_idx, owner);
+
+                                // zero the new block
+                                raw::memset_size_aligned(
+                                    mem_regions[right_node_idx].start_addr.get(),
+                                    aligned_size,
+                                    0usize,
+                                );
+
                                 return Some(mem_regions[right_node_idx].start_addr.get());
                             }
                         }

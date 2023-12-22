@@ -1,5 +1,10 @@
 use crate::common::base::*;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+use crate::arch::x86::vmem::*;
+#[cfg(target_arch = "aarch64")]
+use crate::arch::aa64::vmem64::*;
+
 use core::cell::Cell;
 use core::ops::Range;
 use core::slice;
@@ -176,21 +181,19 @@ impl BitmapOps for Bitmap {
                 ..(bitmap_phys_alloc.unwrap().as_usize() + size_in_bytes))
                 .step_by(MEMORY_DEFAULT_PAGE_USIZE)
             {
-                unsafe {
-                    iron.base_vas_0_5
-                        .lock()
-                        .as_mut()
-                        .unwrap()
-                        .base_page_table
-                        .as_mut()
-                        .unwrap()
-                        .identity_map_page(
-                            i.as_phys(),
-                            self.owner.get(),
-                            PageSize::Small,
-                            PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                        );
-                    }
+                iron.base_vas_0_5
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .base_page_table
+                    .as_mut()
+                    .unwrap()
+                    .identity_map_page(
+                        i.as_phys(),
+                        self.owner.get(),
+                        PageSize::Small,
+                        PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
+                    );
             }
         } else {
             // unfortunately, a bitmap doesn't work without contiguous memory, and
@@ -245,22 +248,20 @@ impl BitmapOps for Bitmap {
                 ..(bitmap_phys_alloc.unwrap().as_usize() + size_in_bytes))
                 .step_by(MEMORY_DEFAULT_PAGE_USIZE)
             {
-                unsafe {
-                    iron.base_vas_0_5
-                        .lock()
-                        .as_mut()
-                        .unwrap()
-                        .base_page_table
-                        .as_mut()
-                        .unwrap()
-                        .map_page(
-                            i.as_phys(),
-                            virt_base,
-                            self.owner.get(),
-                            PageSize::Small,
-                            PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                        );
-                }
+                iron.base_vas_0_5
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .base_page_table
+                    .as_mut()
+                    .unwrap()
+                    .map_page(
+                        i.as_phys(),
+                        virt_base,
+                        self.owner.get(),
+                        PageSize::Small,
+                        PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
+                    );
                 virt_base.inner_inc_by_page_size(PageSize::Small);
             }
         } else {
@@ -273,27 +274,25 @@ impl BitmapOps for Bitmap {
                         .lock()
                         .as_mut()
                         .unwrap()
-                        .alloc_frame_single(Owner::Memory, PageSize::Small);
+                        .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, PageSize::Small, Owner::Memory);
 
                 if page_base.is_some() {
                     allocated_pages += 1;
 
-                    unsafe {
-                        iron.base_vas_0_5
-                            .lock()
-                            .as_mut()
-                            .unwrap()
-                            .base_page_table
-                            .as_mut()
-                            .unwrap()
-                            .map_page(
-                                page_base.unwrap(),
-                                virt_base,
-                                self.owner.get(),
-                                PageSize::Small,
-                                PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                            );
-                    }
+                    iron.base_vas_0_5
+                        .lock()
+                        .as_mut()
+                        .unwrap()
+                        .base_page_table
+                        .as_mut()
+                        .unwrap()
+                        .map_page(
+                            page_base.unwrap(),
+                            virt_base,
+                            self.owner.get(),
+                            PageSize::Small,
+                            PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
+                        );
                     virt_base.inner_inc_by_page_size(PageSize::Small);
                 } else {
                     // we failed allocating individually, so we need to free the pages we did allocate
@@ -357,10 +356,10 @@ impl BitmapOps for Bitmap {
         let size_in_bytes = bitindex::calc_bitindex_size_in_usize(size_in_usize);
         let size_in_pages = pages::calc_pages_reqd(size_in_bytes, PageSize::Small);
 
-        let raw_alloc = unsafe {
+        let raw_alloc = {
             iron().base_vas_0_5
                 .lock()
-                .as_ref()
+                .as_mut()
                 .unwrap()
                 .base_page_table
                 .as_mut()

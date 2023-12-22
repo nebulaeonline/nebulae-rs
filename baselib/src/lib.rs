@@ -42,12 +42,8 @@ pub mod arch {
         pub mod cache_descriptor;
         pub mod cpu;
         pub mod serial;
-
-        #[cfg(target_arch = "x86")]
-        pub mod vmem32;
-        #[cfg(target_arch = "x86_64")]
-        pub mod vmem64;
-
+        pub mod vmem;
+        
         #[cfg(target_arch = "x86_64")]
         pub mod interrupts;
     }
