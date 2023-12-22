@@ -1,7 +1,7 @@
 use crate::structures::bitmap::*;
 use crate::common::base::*;
 
-use crate::arch::x86::vmem::*;
+use crate::vmem::*;
 
 //use core::alloc::{GlobalAlloc, Layout};
 use core::alloc::Layout;

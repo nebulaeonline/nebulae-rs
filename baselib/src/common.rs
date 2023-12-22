@@ -9,13 +9,6 @@ pub use crate::cpu::*;
 pub use crate::kalloc::*;
 pub use crate::memory::*;
 
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-pub use crate::interrupts::*;
-
-// CONSTANTS
-
-pub mod rust {}
-
 pub mod debug_assert {
 
     #[allow(unused_macros)]

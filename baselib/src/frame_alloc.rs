@@ -5,7 +5,7 @@ use crate::structures::bitmap::*;
 use crate::common::base::*;
 use crate::structures::tree::red_black::*;
 
-use crate::arch::x86::vmem::*;
+use crate::vmem::*;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

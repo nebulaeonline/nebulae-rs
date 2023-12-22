@@ -16,7 +16,7 @@ pub mod common;
 pub mod cpu;
 pub mod frame_alloc;
 pub mod genesis;
-pub mod interrupts;
+pub mod vmem;
 pub mod kalloc;
 pub mod kernel_statics;
 pub mod memory;
@@ -29,11 +29,8 @@ pub mod arch {
     #[cfg(target_arch = "aarch64")]
     pub mod aa64 {
         pub mod asm;
-        pub mod async_exception;
         pub mod cpu;
-        pub mod exception;
         pub mod serial;
-        pub mod vmem64;
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -41,10 +38,6 @@ pub mod arch {
         pub mod asm;
         pub mod cache_descriptor;
         pub mod cpu;
-        pub mod serial;
-        pub mod vmem;
-        
-        #[cfg(target_arch = "x86_64")]
-        pub mod interrupts;
+        pub mod serial;        
     }
 }

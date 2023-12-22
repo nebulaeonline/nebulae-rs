@@ -6,11 +6,7 @@ use core::convert::{From, Into};
 use core::mem;
 use core::fmt;
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub use crate::arch::x86::vmem::{BasePageTable, PageSize, Vas};
-
-#[cfg(target_arch = "aarch64")]
-pub use crate::arch::aa64::vmem64::{BasePageTable, PageSize, Vas};
+pub use crate::vmem::{BasePageTable, PageSize, Vas};
 
 // CONSTANTS
 pub const MEMORY_TYPE_BOOT_FRAMER: u32 = 0x80015225;

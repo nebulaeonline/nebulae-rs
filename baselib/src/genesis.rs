@@ -13,10 +13,7 @@ use crate::common::base::*;
 use crate::kernel_statics::*;
 use crate::cpu::*;
 use crate::frame_alloc::*;
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-use crate::interrupts::*;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use crate::arch::x86::vmem::*;
+use crate::vmem::*;
 
 #[repr(C)]
 pub struct Nebulae<'a> {
@@ -668,16 +665,6 @@ pub fn kernel_prep(st: &mut SystemTable<Boot>) {
     
     #[cfg(debug_assertions)]
     serial_println!("physical frame allocator initialized");
-
-    #[cfg(debug_assertions)]
-    serial_println!("enabling exception handling");
-
-    // init exception handling
-    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-    exceptions_init();
-
-    #[cfg(debug_assertions)]
-    serial_println!("exception handling enabled");
 
     //-----------------------------------------------------------------------------------
 

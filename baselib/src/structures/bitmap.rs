@@ -1,7 +1,7 @@
 use crate::common::base::*;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use crate::arch::x86::vmem::*;
+use crate::vmem::*;
 #[cfg(target_arch = "aarch64")]
 use crate::arch::aa64::vmem64::*;
 
