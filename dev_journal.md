@@ -2,7 +2,7 @@
 
 ### Dev Journal
 
-[Go back to main readme](readme.md)
+[Go back to main readme](https://github.com/nebulaeonline/nebulae-rs)
 
 2023-12-22 Update:
 
