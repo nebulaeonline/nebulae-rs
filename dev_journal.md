@@ -4,6 +4,16 @@
 
 [Go back to main readme](https://github.com/nebulaeonline/nebulae-rs)
 
+2024-01-06 Update:
+
+Went on several fool's errands, just got back.
+
+Kernel doesn't do much of anything. Allocator is slowly rounding into a workable prototype. Arm work is at a standstill.
+
+Only building & running on x64.
+
+Slow going.
+
 2023-12-22 Update:
 
 I think I mostly have paging back on track. There's a few lingering bugs. As soon as that is done I'm switching over to arm.

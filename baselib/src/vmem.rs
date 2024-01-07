@@ -1,124 +1,157 @@
 #![allow(dead_code)]
-
-use uefi::table::boot::MemoryType;
-
-use crate::genesis::*;
+use crate::nebulae::*;
 use crate::common::base::*;
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use crate::arch::x86::asm::{x86_invalidate_page, x86_write_cr3};
 
 use core::ptr;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+pub const MEMORY_DEFAULT_PAGE_SIZE_ENUM: PageSize = PageSize::Small;
+
 pub mod pages {
+
     use super::*;
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    #[repr(C)]
+    #[repr(u8)]
     pub enum PageStatus {
         Free,
         Reserved,
         Alloc,
+        Missing,
     }
 
+    #[derive(Debug)]
     #[repr(C)]
-    pub struct PageInfo {
-        pub phys_base: PhysAddr,
-        pub size: usize,
-        pub uefi_flags: usize,
+    pub struct PageInfoStruct {
         pub status: PageStatus,
-        pub owner: Owner,
-        pub purpose: MemoryType,
+        pub held_by_fiber_id: NebulaeId,
         pub flags: usize,
-        pub page_size: PageSize,
+        pub is_child: bool,
+    }
+    impl PageInfoStruct {
+        pub fn new() -> Self {
+            PageInfoStruct {
+                status: PageStatus::Missing,
+                held_by_fiber_id: NEBULAE_ID_NOBODY,
+                flags: ZERO_USIZE,
+                is_child: false,
+            }
+        }
     }
 
-    // calculate the amount of memory given the number of default sized pages
+    // calculate the amount of memory given the number of page_size sized pages
     #[inline(always)]
     pub const fn pages_to_bytes(page_count: usize, page_size: PageSize) -> usize {
-        page_count * page_size.into_bits()
+        page_count * page_size.as_const_usize()
     }
 
     // calculates the number of pages given the number of bytes and the page size
-    // returns true if the number of bytes is evenly divisible by the specified page size
-    // returns false otherwise
     #[inline(always)]
-    pub const fn bytes_to_pages(bytes: usize, page_size: PageSize) -> (usize, bool) {
-        let page_count = (bytes + page_size.into_bits() - 1) / page_size.into_bits();
-        let remainder = bytes % MEMORY_DEFAULT_PAGE_USIZE;
-
-        (page_count, remainder == 0)
+    pub const fn bytes_to_pages(bytes: usize, page_size: PageSize) -> usize {
+        (bytes + page_size.as_const_usize() - 1) / page_size.as_const_usize()
     }
 
-    pub const fn calc_pages_reqd(size: usize, page_size: PageSize) -> usize {
-        (size + page_size.into_bits() - 1) / page_size.into_bits()
-    }
-
-    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
+    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given an address
     #[inline(always)]
-    pub const fn usize_to_page_index(raw: usize) -> usize {
-        raw >> MEMORY_DEFAULT_SHIFT
-    }
-
-    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a byte address
-    #[inline(always)]
-    pub fn addr_to_page_index(addr: impl MemAddr + AsUsize + Sized) -> usize {
+    pub fn addr_to_page_index(addr: impl MemAddr + AsUsize) -> usize {
         addr.as_usize() >> MEMORY_DEFAULT_SHIFT
+    }
+
+    // calculates the page index (in MEMORY_DEFAULT_PAGE_SIZE units) given a usize
+    #[inline(always)]
+    pub fn usize_to_page_index(uaddr: usize) -> usize {
+        uaddr >> MEMORY_DEFAULT_SHIFT
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub struct Vas<'a> {
+pub struct Vas {
     pub cr3: PhysAddr,
-    pub base_page_table: Option<&'a mut BasePageTable>,
+    pub base_page_table: Option<*mut BasePageTable>,
     pub owner: Owner,
 }
-impl<'a> AddrSpace for Vas<'a> {
+impl AddrSpace for Vas {
     fn new() -> Self {
         Vas {
-            cr3: 0usize.as_phys(),
+            cr3: ZERO_USIZE.as_phys(),
             base_page_table: None,
             owner: Owner::Memory,
         }
+    }
+
+    fn init(&mut self, base_page_table_addr: PhysAddr) {
+        debug_assert!(base_page_table_addr.is_default_page_aligned());
+
+        self.base_page_table = Some(
+            raw::abracadabra_ptr_mut::<BasePageTable, PhysAddr>(base_page_table_addr, false),
+        )
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn switch_to(&mut self) {
         self.init_cr3();
 
-        if self.cr3 == 0usize.as_phys() {
-            panic!("VAS::switch_to() -> Tried to switch to an address space with a null cr3");
+        if self.cr3 == ZERO_USIZE.as_phys() {
+            panic!("vas::switch_to() -> Tried to switch to an address space with a null cr3");
         }
 
         x86_write_cr3(self.cr3.as_usize());
     }
 
-    fn identity_map_critical(&mut self) {
-        #[cfg(debug_assertions)]
-        serial_println!("VAS::identity_map_critical() -> entering fn");
-        
-        // FIXME
+    fn base_table(&self) -> Option<&BasePageTable> {
+        if self.base_page_table.is_some() {
+            unsafe { self.base_page_table.unwrap().as_ref() }
+        } else {
+            None
+        }
+    }
+
+    fn base_table_mut(&mut self) -> Option<&mut BasePageTable> {
+        if self.base_page_table.is_some() {
+            unsafe { self.base_page_table.unwrap().as_mut() }
+        } else {
+            None
+        }
+    }
+
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 
-impl<'a> Vas<'a> {
+impl Vas {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    pub fn init_cr3(&mut self) -> PhysAddr {
+    pub fn init_cr3(&mut self) -> Option<PhysAddr> {
         
+        // if we've called this with a set of null
+        // page tables, then we can bail
+        if self.base_page_table.is_none() {
+            return None;
+        }
+
         // get the address of the base page table
-        let mut p = raw::ref_to_raw::<BasePageTable, PhysAddr>(self.base_page_table.as_mut().unwrap());
+        let mut p = raw::ref_to_raw::<BasePageTable, PhysAddr>(unsafe { self.base_page_table.unwrap().as_ref().unwrap() });
         p.inner_or(PAGING_WRITETHROUGH);
         self.cr3 = p;
-        p
+        Some(p)
     }
 }
 
 // Page dir / table entries
 // Level 4 - 512G, Level 3 - 1G, Level 2 - 2M, Level 1 - 4K
-// x86 just has levels 2 (@4MB pages) & 1 (still 4KB pages)
+// x86 just has levels 2 (@4MB pages) & 1 (4KB pages)
 pub type Pte = PhysAddr;
 
 #[cfg(target_arch = "x86")]
 #[repr(usize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PageSize {
     Small = USIZE_4K,
     Medium = USIZE_4M,
@@ -137,11 +170,15 @@ impl PageSize {
             _ => PageSize::Small,
         }
     }
+
+    pub const fn as_const_usize(&self) -> usize {
+        self.0
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
 #[repr(usize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PageSize {
     Small = USIZE_4K,
     Medium = USIZE_2M,
@@ -150,10 +187,12 @@ pub enum PageSize {
 
 #[cfg(target_arch = "x86_64")]
 impl PageSize {
+    #[inline(always)]
     pub const fn into_bits(self) -> usize {
         self as _
     }
 
+    #[inline(always)]
     pub const fn from_bits(value: usize) -> Self {
         match value {
             USIZE_4K => PageSize::Small,
@@ -162,9 +201,15 @@ impl PageSize {
             _ => PageSize::Small,
         }
     }
+
+    #[inline(always)]
+    pub const fn as_const_usize(&self) -> usize {
+        self.into_bits()
+    }
 }
 
-impl AsUsize for PageSize {
+// this should be able to be truly const, but it's not supported yet
+impl const AsUsize for PageSize {
     fn as_usize(&self) -> usize {
         self.into_bits()
     }
@@ -173,53 +218,222 @@ impl AsUsize for PageSize {
 #[repr(C)]
 #[derive(Debug)]
 pub struct PageTable {
-    pub entries: [Pte; PAGE_TABLE_MAX_ENTRIES],
+    pub entries: *mut [Pte; PAGE_TABLE_MAX_ENTRIES],
 }
+impl PageTable {
+    pub fn new(base_addr: PhysAddr) -> Self {
+        debug_assert!(base_addr.is_default_page_aligned());
+
+        raw::memset_aligned(base_addr, MEMORY_DEFAULT_PAGE_USIZE, ZERO_USIZE);
+
+        PageTable {
+            entries: {
+                unsafe { core::mem::transmute::<PhysAddr, *mut [Pte; PAGE_TABLE_MAX_ENTRIES]>(base_addr) }
+            }
+        }        
+    }
+
+    pub fn rebase(&mut self, base_addr: PhysAddr) {
+        debug_assert!(base_addr.is_default_page_aligned());
+        self.entries = unsafe { core::mem::transmute::<PhysAddr, *mut [Pte; PAGE_TABLE_MAX_ENTRIES]>(base_addr) };        
+    }
+
+    #[inline(always)]
+    pub fn get_entries(&self) -> &[Pte; PAGE_TABLE_MAX_ENTRIES] {
+        unsafe { &*self.entries }
+    }
+
+    #[inline(always)]
+    pub fn get_entries_mut(&mut self) -> &mut [Pte; PAGE_TABLE_MAX_ENTRIES] {
+        unsafe { &mut *self.entries }
+    }
+
+    #[inline(always)]
+    pub fn set_entry(&mut self, idx: usize, entry: Pte) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx] = entry };
+    }
+
+    #[inline(always)]
+    pub fn get_entry(&self, idx: usize) -> Pte {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx] }
+    }
+
+    #[inline(always)]
+    pub fn clear_entry(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx] = ZERO_USIZE.as_phys() };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_present(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_PRESENT) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_not_present(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_PRESENT) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_rw(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_WRITEABLE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_readonly(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_WRITEABLE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_user(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_USERMODE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_supervisor(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_USERMODE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_write_through(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_WRITETHROUGH) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_not_write_through(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_WRITETHROUGH) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_cache_disabled(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_CACHE_DISABLE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_cache_enabled(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_CACHE_DISABLE) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_accessed(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_ACCESSED) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_not_accessed(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_ACCESSED) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_dirty(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_DIRTY) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_clean(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_DIRTY) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_global(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_GLOBAL) };
+    }
+
+    #[inline(always)]
+    pub fn clear_entry_global(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_GLOBAL) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_page_frame(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_IS_PAGE_FRAME) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_page_directory(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_IS_PAGE_FRAME) };
+    }
+
+    #[inline(always)]
+    pub fn is_entry_page_frame(&self, idx: usize) -> bool {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { ubit::is_bit_set(self.entries.as_mut().unwrap()[idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) }
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_no_execute(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_or(PAGING_NX) };
+    }
+
+    #[inline(always)]
+    pub fn mark_entry_executable(&mut self, idx: usize) {
+        debug_assert!(idx < PAGE_TABLE_MAX_ENTRIES);
+        unsafe { self.entries.as_mut().unwrap()[idx].inner_and(!PAGING_NX) };
+    }
+}
+
+//#[cfg(target_arch = "x86")]
 
 pub type BasePageTable = PageTable;
 
 impl PageDir for BasePageTable {
-    fn new_base() -> PhysAddr {
-        #[cfg(debug_assertions)]
-        serial_println!("BasePageTable::new_base() -> preparing to allocate a new base paging struct");
-
-        let iron = iron();
-
-        #[cfg(debug_assertions)]
-        serial_println!("BasePageTable::new_base() -> iron @ 0x{:08x}", iron as *const Nebulae as usize);
-
-        let new_pd_base = 
-            iron.frame_alloc_internal_0_2
-                .lock()
-                .as_mut()
-                .unwrap()
-                .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, PageSize::Small, Owner::Memory);
-
+    // creates a new address space for the specified owner
+    fn new_addr_space(owner: Owner) -> Option<PhysAddr> {
         
-        
-        match new_pd_base {
-            None => panic!("BasePageTable::new_base() -> out of memory when allocating for a new base paging struct"),
-            Some(np) => {
-                #[cfg(debug_assertions)]
-                serial_println!("BasePageTable::new_base() -> new base paging struct @ 0x{:0x}", new_pd_base.unwrap());
+        // make sure we're not calling this before we
+        // have a frame allocator
+        debug_assert!(frame_alloc_fuse(true));
 
-                #[cfg(debug_assertions)]
-                serial_println!("BasePageTable::new_base() -> identity mapping base paging struct @ 0x{:0x}", new_pd_base.unwrap());
+        // allocate for a new page directory
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
+        serial_println!("BasePageTable::new_addr_space() -> preparing new address space for {:?}", owner);
 
-                let pd = raw::abracadabra_static_ref_mut::<BasePageTable>(np);
-                pd.identity_map_page(
-                    np,
-                    Owner::Memory,
-                    PageSize::Small,
-                    PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                );
+        let neb = iron().unwrap();
 
-                #[cfg(debug_assertions)]
-                serial_println!("BasePageTable::new_base() -> identity mapping complete");
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
+        serial_println!("BasePageTable::new_addr_space() -> iron: nebulae @ 0x{:08x}", neb as *const Nebulae as usize);
 
-                new_pd_base.unwrap()
-            }
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
+        serial_println!("BasePageTable::new_addr_space() -> allocating base paging struct");
+
+        // allocate for a new base paging struct
+        let new_base_pd_frame_result = 
+            neb.frame_alloc_internal_04
+                .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
+                .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, MEMORY_DEFAULT_PAGE_SIZE_ENUM, owner);
+
+        // make sure we got a frame; if not, we're out of memory
+        if new_base_pd_frame_result.is_none() {
+            #[cfg(all(debug_assertions, feature = "serialdbg"))]
+            serial_println!("BasePageTable::new_addr_space() -> out of memory when allocating for a new base paging struct for {:?}", owner);
+            return None;
+        } else {
+            #[cfg(all(debug_assertions, feature = "serialdbg"))]
+            serial_println!("BasePageTable::new_addr_space() -> new base paging struct allocated @ 0x{:0x} for {:?}", new_base_pd_frame_result.unwrap(), owner);
         }
+
+        Some(new_base_pd_frame_result.unwrap())
     }
 
     #[cfg(target_arch = "x86")]
@@ -286,7 +500,7 @@ impl PageDir for BasePageTable {
                     .lock()
                     .as_mut()
                     .unwrap()
-                    .alloc_frame_single(Owner::System, PageSize::Small);
+                    .alloc_frame_single(Owner::Kernel, MEMORY_DEFAULT_PAGE_SIZE_ENUM);
 
             match new_pt_base {
                 None => return None,
@@ -295,7 +509,7 @@ impl PageDir for BasePageTable {
                     self.identity_map_page(
                         np,
                         Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     );
                     self.entries[pd_idx]
@@ -322,13 +536,14 @@ impl PageDir for BasePageTable {
         &mut self,
         p: PhysAddr,
         v: VirtAddr,
-        owner: Owner,
         page_size: PageSize,
         flags: usize,
     ) -> Option<VirtAddr> {
         let (pml4_idx, pdpt_idx, pd_idx, pt_idx) = v.get_page_table_indexes();
 
-        #[cfg(debug_assertions)]
+        debug_assert!(p.is_aligned(page_size.as_usize()) && v.is_aligned(page_size.as_usize()));
+
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
         serial_println!("BasePageTable::map_page() -> mapping page @ 0x{:0x} to 0x{:0x} with size {} and flags 0x{:0x}", p, v, page_size.as_usize(), flags);
 
         let pdpt: &mut PageTable;
@@ -337,164 +552,155 @@ impl PageDir for BasePageTable {
         let pd_is_new: bool;
         let pt: &mut PageTable;
 
-        match page_size {
-            PageSize::Small => {
-                if !p.is_aligned_4k() {
-                    return None;
-                }
-            }
-            PageSize::Medium => {
-                if !p.is_aligned_2m() {
-                    return None;
-                }
-            }
-            PageSize::Huge => {
-                if !p.is_aligned_1g() {
-                    return None;
-                }
-            }
-        }
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
+        serial_println!("BasePageTable::map_page() -> self.entries[] == 0x{:0x}", self.entries as usize);
 
-        #[cfg(debug_assertions)]
-        serial_println!("BasePageTable::map_page() -> page size is valid");
+        #[cfg(all(debug_assertions, feature = "serialdbg"))]
+        serial_println!("BasePageTable::map_page() -> page map level 4 index == {}", pml4_idx);
 
-        #[cfg(debug_assertions)]
-        serial_println!("BasePageTable::map_page() -> self.entries == 0x{:0x}", self.entries.as_ptr() as usize);
-
-        #[cfg(debug_assertions)]
-        serial_println!("BasePageTable::map_page() -> pml4_idx == {}", pml4_idx);
+        let my_entries = unsafe { self.entries.as_mut().unwrap() };
 
         // check our entry in the pml4 table, which maps 512GB chunks
         // create a new pdpt if one does not exist
-        if self.entries[pml4_idx] == 0usize.as_phys() {
-            #[cfg(debug_assertions)]
+        if my_entries[pml4_idx] == ZERO_USIZE.as_phys() {
+            #[cfg(all(debug_assertions, feature = "serialdbg"))]
             serial_println!("BasePageTable::map_page() -> allocating frame for new pdpt");
             
             let new_pdpt_base = 
-                iron().frame_alloc_internal_0_2
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, PageSize::Small, Owner::System);
+                iron().unwrap().frame_alloc_internal_04.as_mut()
+                .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
+                .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, MEMORY_DEFAULT_PAGE_SIZE_ENUM, Owner::Memory);
 
             match new_pdpt_base {
                 None => return None,
                 Some(np) => {
-                    #[cfg(debug_assertions)]
+                    #[cfg(all(debug_assertions, feature = "serialdbg"))]
                     serial_println!("BasePageTable::map_page() -> new frame obtained for new pdpt @ 0x{:0x}", np);
 
-                    self.entries[pml4_idx] = np;
-                    
-                    #[cfg(debug_assertions)]
+                    #[cfg(all(debug_assertions, feature = "serialdbg"))]
                     serial_println!("BasePageTable::map_page() -> identity mapping new pdpt @ 0x{:0x}", np);
                    
-                    self.identity_map_page(
+                    self.identity_map_page (
                         np,
-                        Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     );
-                    self.entries[pml4_idx]
+                    
+                    my_entries[pml4_idx] = np;
+                    my_entries[pml4_idx]
                         .inner_or(PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH);
                     pdpt_is_new = true;
                 }
             }
 
-            #[cfg(debug_assertions)]
+            #[cfg(all(debug_assertions, feature = "serialdbg"))]
             serial_println!("BasePageTable::map_page() -> new pdpt frame created & identity mapped");
         } else {
-            #[cfg(debug_assertions)]
-            serial_println!("BasePageTable::map_page() -> pdpt located: 0x{:0x}", self.entries[pml4_idx]);
+            #[cfg(all(debug_assertions, feature = "serialdbg"))]
+            serial_println!("BasePageTable::map_page() -> pdpt located: 0x{:0x}", my_entries[pml4_idx]);
 
             pdpt_is_new = false;
         }
 
-        // check our entry in the pdpt table, which maps 1GB chunks
+        // check our entry in the pdpt table, which maps 1GB chunks.
         // create a reference to our pdpt
-        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(self.entries[pml4_idx].align_4k());
-
+        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(my_entries[pml4_idx].align_canon_default(), false);
+        let pdpt_entries = unsafe { pdpt.entries.as_mut().unwrap() };
+        
         // see if we're doing a 1GB page. if so, mark it as a page and clean up if necessary
-        if page_size.as_usize() == PageSize::Huge.as_usize() {
+        if page_size == PageSize::Huge {
+            
             // Since we're mapping a huge page, we need to remove any mappings that may have been
-            // present as 2MB or 4KB pages underneath, so we don't have a memory leak
+            // present as 2MB or 4KB pages underneath, so we don't leak memory
+            
+            // if we just created this pdpt, then there's nothing to remove
             if !pdpt_is_new {
-                // if we just created this pdpt, then there's nothing to remove
 
-                // don't do anything if this was already a 1GB page, since there will be no pds or pts to remove
-                if !ubit::is_bit_set(pdpt.entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
-                    // follow the old pdpt entry to its page directory
+                // check to see if this entry already pointed to a page frame.
+                // if this was already a 1GB page frame pointer, then there will
+                // be no pds or pts to remove
+                if !ubit::is_bit_set(pdpt_entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+                    
+                    // follow the old pdpt entry to its page directory and obtain a reference to it
                     let local_pd = raw::abracadabra_static_ref_mut::<PageTable>(
-                        pdpt.entries[pdpt_idx].align_4k(),
+                        pdpt_entries[pdpt_idx].align_canon_default(), false,
                     );
+                    let local_pd_entries = unsafe { local_pd.entries.as_mut().unwrap() };
+
+                    // this pdpt entry is either a pointer to a 2MB page frame, or a pointer to
+                    // another page directory whose entries point to 4KB pages.
 
                     // if they're not 2MB page entries, then we need to
-                    // de-allocate every page table under this page directory
+                    // de-allocate the page tables under this page directory.
+                    
+                    // the final step is to set the entry to zero, which is done regardless of
+                    // whether the entry was a 2MB page or a page directory
                     for i in 0..PAGE_TABLE_MAX_ENTRIES {
                         if !ubit::is_bit_set(
-                            local_pd.entries[i].as_usize(),
+                            local_pd_entries[i].as_usize(),
                             PAGING_IS_PAGE_FRAME_BIT,
                         ) {
-                            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                                local_pd.entries[i].align_4k(),
-                                Owner::System,
+                            iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                                local_pd_entries[i].align_canon_default(),
+                                Owner::Memory,
                             );
 
                             self.unmap_page(
-                                local_pd.entries[i].align_4k().as_usize().as_virt(),
+                                local_pd_entries[i].align_canon_default().as_usize().as_virt(),
                                 Owner::Memory,
-                                PageSize::Small,
+                                MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                             );
                         }
                     }
 
                     // now de-allocate the page directory itself
-                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                        pdpt.entries[pdpt_idx].align_4k(),
-                        Owner::System);
+                    iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                        pdpt_entries[pdpt_idx].align_canon_default(),
+                        Owner::Memory);
 
                     self.unmap_page(
-                        pdpt.entries[pdpt_idx].align_4k().as_usize().as_virt(),
+                        pdpt_entries[pdpt_idx].align_canon_default().as_usize().as_virt(),
                         Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                     );
                 }
             }
 
             // Map our huge page
-            pdpt.entries[pdpt_idx] = p;
-            pdpt.entries[pdpt_idx].inner_or(flags | PAGING_IS_PAGE_FRAME);
+            pdpt_entries[pdpt_idx] = p;
+            pdpt_entries[pdpt_idx].inner_or(flags | PAGING_IS_PAGE_FRAME);
 
             // Now that we've cleaned up the already mapped pages,
             // and we've mapped the 1GB page, we can return
             x86_invalidate_page(v.as_usize());
-            // mark the owner for this page in the page info struct
-            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
-            let pageidx = pages::usize_to_page_index(p.as_usize());
-            pageinfo[pageidx].owner = owner;
 
+            // mark the owner for this page in the page info struct
+            let mut page_info_struct_lock = iron().unwrap().page_info_structs_01.lock_rw_spin();
+            if page_info_struct_lock.as_ref().is_some() {
+                let pageidx = pages::addr_to_page_index(p);
+                page_info_struct_lock.as_mut().unwrap().as_mut().unwrap()[pageidx].held_by_fiber_id = ZERO_U128;
+            }
+            
             return Some(v);
         } // PageSize::Huge
 
         // create a new pd if one does not exist
-        if pdpt.entries[pdpt_idx] == 0usize.as_phys() {
+        if pdpt_entries[pdpt_idx] == ZERO_USIZE.as_phys() {
             let new_pd_base = 
-                iron().frame_alloc_internal_0_2
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, PageSize::Small, Owner::System);
+                iron().unwrap().frame_alloc_internal_04
+                    .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
+                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, MEMORY_DEFAULT_PAGE_SIZE_ENUM, Owner::Memory);
 
             match new_pd_base {
                 None => return None,
                 Some(np) => {
-                    pdpt.entries[pdpt_idx] = np;
+                    pdpt_entries[pdpt_idx] = np;
                     self.identity_map_page(
                         np,
-                        Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     );
-                    pdpt.entries[pdpt_idx]
+                    pdpt_entries[pdpt_idx]
                         .inner_or(PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH);
                     pd_is_new = true;
                 }
@@ -504,15 +710,15 @@ impl PageDir for BasePageTable {
         }
 
         // create a reference to our pd
-        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt.entries[pdpt_idx].align_4k());
+        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt_entries[pdpt_idx].align_canon_default(), false);
+        let pd_entries = unsafe { pd.entries.as_mut().unwrap() };
 
         // see if we're doing a 2MB page. if so, mark it as a page and clean up if necessary
-        if page_size.as_usize() == PageSize::Medium.as_usize() {
+        if page_size == PageSize::Medium {
             // Since we're mapping a medium page, we need to remove any mappings that may have been
             // present as 4KB pages underneath, so we don't have a memory leak
             if !pd_is_new {
                 // if we just created this pd, then there's nothing to remove
-
                 {
                     // all of the entries in the page directory are either page tables that point
                     // to 4KB pages, or they are 2MB page table entries. We need to de-allocate
@@ -520,91 +726,83 @@ impl PageDir for BasePageTable {
                     for i in 0..PAGE_TABLE_MAX_ENTRIES {
                         // don't do anything if this was already a 2MB page, since there is no page table in that case
                         if !ubit::is_bit_set(
-                            pd.entries[pd_idx].as_usize(),
+                            pd_entries[pd_idx].as_usize(),
                             PAGING_IS_PAGE_FRAME_BIT,
                         ) {
                             // de-allocate every page under this page table
-                            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                                pd.entries[i].align_4k(),
-                                Owner::System,
+                            iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                                pd_entries[i].align_canon_default(),
+                                Owner::Memory,
                             );
 
                             self.unmap_page(
-                                pd.entries[i].align_4k().as_usize().as_virt(),
+                                pd_entries[i].align_canon_default().as_usize().as_virt(),
                                 Owner::Memory,
-                                PageSize::Small,
+                                MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                             );
                         }
                     }
 
                     // now de-allocate the page table itself
-                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                        pd.entries[pd_idx].align_4k(),
-                        Owner::System,
+                    iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                        pd_entries[pd_idx].align_canon_default(),
+                        Owner::Memory,
                     );
 
                     self.unmap_page(
-                        pd.entries[pd_idx].align_4k().as_usize().as_virt(),
+                        pd_entries[pd_idx].align_canon_default().as_usize().as_virt(),
                         Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                     );
                 }
             }
 
             // Map our medium page
-            pd.entries[pd_idx] = p;
-            pd.entries[pd_idx].inner_or(flags | PAGING_IS_PAGE_FRAME);
+            pd_entries[pd_idx] = p;
+            pd_entries[pd_idx].inner_or(flags | PAGING_IS_PAGE_FRAME);
 
             // Now that we've cleaned up the already mapped pages,
             // and we've mapped the 2MB page, we can return
             x86_invalidate_page(v.as_usize());
-            // mark the owner for this page in the page info struct
-            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
-            let pageidx = pages::usize_to_page_index(p.as_usize());
-            pageinfo[pageidx].owner = owner;
-
+            
             return Some(v);
         } // PageSize::Medium
 
         // This must be a 4KB page
 
         // create a new pt if one does not exist
-        if pd.entries[pd_idx] == 0usize.as_phys() {
+        if pd_entries[pd_idx] == ZERO_USIZE.as_phys() {
             let new_pt_base = 
-                iron().frame_alloc_internal_0_2
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, PageSize::Small, Owner::System);
+                iron().unwrap().frame_alloc_internal_04
+                    .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
+                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, MEMORY_DEFAULT_PAGE_SIZE_ENUM, Owner::Memory);
 
             match new_pt_base {
                 None => return None,
                 Some(np) => {
-                    pd.entries[pd_idx] = np;
+                    pd_entries[pd_idx] = np;
                     self.identity_map_page(
                         np,
-                        Owner::Memory,
-                        PageSize::Small,
+                        MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH,
                     );
-                    pd.entries[pd_idx]
+                    pd_entries[pd_idx]
                         .inner_or(PAGING_PRESENT | PAGING_WRITEABLE | PAGING_WRITETHROUGH);
                 }
             }
         }
 
         // create a reference to our pt
-        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd.entries[pd_idx].align_4k());
+        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd_entries[pd_idx].align_canon_default(), false);
+        let pt_entries = unsafe { pt.entries.as_mut().unwrap() };
 
         // Map our small page
         // no page frame flag for 4KB pages
-        pt.entries[pt_idx] = p;
-        pt.entries[pt_idx].inner_or(flags);
+        pt_entries[pt_idx] = p;
+        pt_entries[pt_idx].inner_or(flags);
+
+        // signal that the old page mapping is no longer valid
         x86_invalidate_page(v.as_usize());
-        // mark the owner for this page in the page info struct
-        let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
-        let pageidx = pages::usize_to_page_index(p.as_usize());
-        pageinfo[pageidx].owner = owner;
 
         Some(v)
     }
@@ -654,7 +852,7 @@ impl PageDir for BasePageTable {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn unmap_page(&mut self, v: VirtAddr, owner: Owner, page_size: PageSize) {
+    fn unmap_page(&mut self, v: VirtAddr, owner: Owner, page_size: PageSize) -> bool {
         let (pml4_idx, pdpt_idx, pd_idx, pt_idx) = v.get_page_table_indexes();
 
         let pdpt: &mut PageTable;
@@ -664,109 +862,119 @@ impl PageDir for BasePageTable {
         match page_size {
             PageSize::Small => {
                 if !v.is_aligned_4k() {
-                    panic!("In x86_64, small pages must be 4KB aligned to unmap");
+                    return false;
                 }
             }
             PageSize::Medium => {
                 if !v.is_aligned_2m() {
-                    panic!("In x86_64, medium pages must be 2MB aligned to unmap");
+                    return false;
                 }
             }
             PageSize::Huge => {
                 if !v.is_aligned_1g() {
-                    panic!("In x86_64, huge pages must be 1GB aligned to unmap");
+                    return false;
                 }
             }
         }
 
         let fn_unmap_page_info = |p: PhysAddr, page_size: PageSize| {
-            let pageinfo = unsafe { iron().page_info.unwrap().as_mut().unwrap() };
-            let pageidx = pages::usize_to_page_index(p.as_usize());
+            let mut page_info_struct_results = iron().unwrap().page_info_structs_01.lock_rw_spin();
+            if page_info_struct_results.is_none() {
+                return;
+            }
 
-            if page_size.as_usize() > PageSize::Small.as_usize() {
+            let page_info_structs = (*page_info_struct_results).as_mut().unwrap();
+            let page_idx = pages::addr_to_page_index(p);
+
+            if page_size > MEMORY_DEFAULT_PAGE_SIZE_ENUM {
                 // if this is a huge or medium page, then we need to clear the owner and status
                 // for every page underneath
-                let page_count = pages::calc_pages_reqd(page_size.as_usize(), PageSize::Small);
+                let page_count = pages::bytes_to_pages(page_size.as_usize(), MEMORY_DEFAULT_PAGE_SIZE_ENUM);
                 for i in 0..page_count {
-                    pageinfo[pageidx + i].owner = Owner::Nobody;
-                    pageinfo[pageidx + i].status = pages::PageStatus::Free;
+                    page_info_structs[page_idx + i].held_by_fiber_id = ZERO_U128;
+                    page_info_structs[page_idx + i].status = pages::PageStatus::Free;
                 }
             } else {
-                pageinfo[pageidx].owner = Owner::Nobody;
-                pageinfo[pageidx].status = pages::PageStatus::Free;
+                page_info_structs[page_idx].held_by_fiber_id = ZERO_U128;
+                page_info_structs[page_idx].status = pages::PageStatus::Free;
             }
         };
 
+        let my_entries = unsafe { self.entries.as_mut().unwrap() };
+
         // check our entry in the pml4 table, which maps 512GB chunks
-        if self.entries[pml4_idx] == 0usize.as_phys() {
+        if my_entries[pml4_idx] == ZERO_USIZE.as_phys() {
             // if the entry is already 0, then there's nothing to do
-            return;
+            return true;
         }
 
         // check our entry in the pdpt table, which maps 1GB chunks
         // create a reference to our pdpt
-        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(self.entries[pml4_idx].align_4k());
+        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(my_entries[pml4_idx].align_canon_default(), false);
+        let pdpt_entries = unsafe { pdpt.entries.as_mut().unwrap() };
 
         // see if we're unmapping a 1GB page. if so, mark it as zero and clean up if necessary
-        if page_size.as_usize() == PageSize::Huge.as_usize() {
+        if page_size == PageSize::Huge {
             // Since we're unmapping a huge page, we need to remove any mappings that may have been
             // present as 2MB or 4KB pages underneath, so we don't have a memory leak
 
             // don't do anything if this was already a 1GB page, since there will be no pds or pts to remove
-            if !ubit::is_bit_set(pdpt.entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+            if !ubit::is_bit_set(pdpt_entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
                 // follow the old pdpt entry to its page directory
                 let local_pd = raw::abracadabra_static_ref_mut::<PageTable>(
-                    pdpt.entries[pdpt_idx].align_4k(),
+                    pdpt_entries[pdpt_idx].align_canon_default(), false,
                 );
+                let local_pd_entries = unsafe { local_pd.entries.as_mut().unwrap() };
 
                 // if they're not 2MB page entries, then we need to
                 // de-allocate every page table under this page directory
                 for i in 0..PAGE_TABLE_MAX_ENTRIES {
-                    if !ubit::is_bit_set(local_pd.entries[i].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
-                        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                            local_pd.entries[i].align_4k(),
+                    if !ubit::is_bit_set(local_pd_entries[i].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+                        iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                            local_pd_entries[i].align_canon_default(),
                             Owner::Memory,
                         );
 
                         self.unmap_page(
-                            local_pd.entries[i].align_4k().as_usize().as_virt(),
+                            local_pd_entries[i].align_canon_default().as_usize().as_virt(),
                             Owner::Memory,
-                            PageSize::Small,
+                            MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         );
                     }
                 }
 
                 // now de-allocate the page directory itself
-                iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                    pdpt.entries[pdpt_idx].align_4k(),
-                    Owner::System,
+                iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                    pdpt_entries[pdpt_idx].align_canon_default(),
+                    Owner::Kernel,
                 );
 
                 self.unmap_page(
-                    pdpt.entries[pdpt_idx].align_4k().as_usize().as_virt(),
+                    pdpt_entries[pdpt_idx].align_canon_default().as_usize().as_virt(),
                     owner,
-                    PageSize::Small,
+                    MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                 );
             }
 
             // Clear our owner information
-            fn_unmap_page_info(pdpt.entries[pdpt_idx].align_1g(), page_size);
+            fn_unmap_page_info(pdpt_entries[pdpt_idx].align_1g(), page_size);
 
             // Unmap our huge page
-            pdpt.entries[pdpt_idx] = 0usize.as_phys();
+            pdpt_entries[pdpt_idx] = ZERO_USIZE.as_phys();
             x86_invalidate_page(v.as_usize());
         } // PageSize::Huge
 
-        if pdpt.entries[pdpt_idx] == 0usize.as_phys() {
+        if pdpt_entries[pdpt_idx] == ZERO_USIZE.as_phys() {
             // if the entry is already 0, then there's nothing to do
-            return;
+            return true;
         }
 
         // create a reference to our pd
-        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt.entries[pdpt_idx].align_4k());
+        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt_entries[pdpt_idx].align_canon_default(), false);
+        let pd_entries = unsafe { pd.entries.as_mut().unwrap() };
 
         // see if we're unmapping a 2MB page. if so, mark it as a 0 and clean up if necessary
-        if page_size.as_usize() == PageSize::Medium.as_usize() {
+        if page_size == PageSize::Medium {
             // Since we're unmapping a medium page, we need to remove any mappings that may have been
             // present as 4KB pages underneath, so we don't have a memory leak
             {
@@ -775,59 +983,61 @@ impl PageDir for BasePageTable {
                 // every page table under this page directory
                 for i in 0..PAGE_TABLE_MAX_ENTRIES {
                     // don't do anything if this was already a 2MB page, since there is no page table in that case
-                    if !ubit::is_bit_set(pd.entries[pd_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+                    if !ubit::is_bit_set(pd_entries[pd_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
                         // de-allocate every page under this page table
-                        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                            pd.entries[i].align_4k(),
+                        iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                            pd_entries[i].align_canon_default(),
                             Owner::Memory,
                         );
 
                         self.unmap_page(
-                            pd.entries[i].align_4k().as_usize().as_virt(),
+                            pd_entries[i].align_canon_default().as_usize().as_virt(),
                             Owner::Memory,
-                            PageSize::Small,
+                            MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                         );
                     }
                 }
 
                 // now de-allocate the page directory itself
-                iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
-                    pdpt.entries[pdpt_idx].align_4k(),
+                iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
+                    pdpt_entries[pdpt_idx].align_canon_default(),
                     Owner::Memory,
                 );
 
                 self.unmap_page(
-                    pdpt.entries[pdpt_idx].align_4k().as_usize().as_virt(),
+                    pdpt_entries[pdpt_idx].align_canon_default().as_usize().as_virt(),
                     Owner::Memory,
-                    PageSize::Small,
+                    MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                 );
             }
 
             // Clear our owner information
-            fn_unmap_page_info(pd.entries[pd_idx].align_2m(), page_size);
+            fn_unmap_page_info(pd_entries[pd_idx].align_canon_2m(), page_size);
 
             // unmap our medium page
-            pd.entries[pd_idx] = 0usize.as_phys();
+            pd_entries[pd_idx] = ZERO_USIZE.as_phys();
             x86_invalidate_page(v.as_usize());
         } // PageSize::Medium
 
-        if pd.entries[pd_idx] == 0usize.as_phys() {
+        if pd_entries[pd_idx] == ZERO_USIZE.as_phys() {
             // if the entry is already 0, then there's nothing to do
-            return;
+            return true;
         }
 
         // This is a 4KB page
 
         // create a reference to our pt
-        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd.entries[pd_idx].align_4k());
+        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd_entries[pd_idx].align_canon_default(), false);
+        let pt_entries = unsafe { pt.entries.as_mut().unwrap() };
 
         // Clear our owner information
-        fn_unmap_page_info(pt.entries[pt_idx].align_4k(), page_size);
+        fn_unmap_page_info(pt_entries[pt_idx].align_canon_default(), page_size);
 
         // Unmap our small page
         // no page frame flag for 4KB pages
-        pt.entries[pt_idx] = 0usize.as_phys();
+        pt_entries[pt_idx] = ZERO_USIZE.as_phys();
         x86_invalidate_page(v.as_usize());
+        true
     }
 
     #[cfg(target_arch = "x86")]
@@ -862,51 +1072,56 @@ impl PageDir for BasePageTable {
         let pd: &mut PageTable;
         let pt: &mut PageTable;
 
+        let my_entries = unsafe { self.entries.as_mut().unwrap() };
+
         // check our entry in the pml4 table, which maps 512GB chunks
-        if self.entries[pml4_idx] == 0usize.as_phys() {
+        if my_entries[pml4_idx] == ZERO_USIZE.as_phys() {
             // if the entry is 0, then there's nothing to do
-            return 0usize.as_phys();
+            return ZERO_USIZE.as_phys();
         }
 
         // check our entry in the pdpt table, which maps 1GB chunks
         // create a reference to our pdpt
-        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(self.entries[pml4_idx].align_4k());
+        pdpt = raw::abracadabra_static_ref_mut::<PageTable>(my_entries[pml4_idx].align_canon_default(), false);
+        let pdpt_entries = unsafe { pdpt.entries.as_mut().unwrap() };
 
         // see if we're getting a 1GB page. if so, return it
-        if ubit::is_bit_set(pdpt.entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
-            return pdpt.entries[pdpt_idx].align_1g();
+        if ubit::is_bit_set(pdpt_entries[pdpt_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+            return pdpt_entries[pdpt_idx].align_canon_1g();
         } // PageSize::Huge
 
-        if pdpt.entries[pdpt_idx] == 0usize.as_phys() {
+        if pdpt_entries[pdpt_idx] == ZERO_USIZE.as_phys() {
             // if the entry is 0, then there's nothing to do
-            return 0usize.as_phys();
+            return ZERO_USIZE.as_phys();
         }
 
         // create a reference to our pd
-        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt.entries[pdpt_idx].align_4k());
+        pd = raw::abracadabra_static_ref_mut::<PageTable>(pdpt_entries[pdpt_idx].align_canon_default(), false);
+        let pd_entries = unsafe { pd.entries.as_mut().unwrap() };
 
         // see if we're getting a 2MB page. if so, return it
-        if ubit::is_bit_set(pd.entries[pd_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
-            return pd.entries[pd_idx].align_2m();
+        if ubit::is_bit_set(pd_entries[pd_idx].as_usize(), PAGING_IS_PAGE_FRAME_BIT) {
+            return pd_entries[pd_idx].align_2m();
         } // PageSize::Medium
 
-        if pd.entries[pd_idx] == 0usize.as_phys() {
+        if pd_entries[pd_idx] == ZERO_USIZE.as_phys() {
             // if the entry is 0, then there's nothing to do
-            return 0usize.as_phys();
+            return ZERO_USIZE.as_phys();
         }
 
         // This is a 4KB page
 
         // create a reference to our pt
-        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd.entries[pd_idx].align_4k());
+        pt = raw::abracadabra_static_ref_mut::<PageTable>(pd_entries[pd_idx].align_canon_default(), false);
+        let pt_entries = unsafe { pt.entries.as_mut().unwrap() };
 
         // return our small page
-        return pt.entries[pt_idx].align_4k();
+        return pt_entries[pt_idx].align_canon_default();
     }
 
     fn dealloc_page(&mut self, v: VirtAddr, owner: Owner, page_size: PageSize) {
         self.unmap_page(v, owner, page_size);
-        iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
+        iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
             self.virt_to_phys(v),
             Owner::Nobody,
         );
@@ -919,12 +1134,12 @@ impl PageDir for BasePageTable {
         owner: Owner,
         page_size: PageSize,
     ) {
-        let page_count = pages::calc_pages_reqd(size, PageSize::Small);
+        let page_count = pages::bytes_to_pages(size, MEMORY_DEFAULT_PAGE_SIZE_ENUM);
         let mut cv: VirtAddr = v;
 
         for _i in 0..page_count {
             self.unmap_page(cv, owner, page_size);
-            iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
+            iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
                 self.virt_to_phys(cv),
                 Owner::Nobody,
             );
@@ -932,11 +1147,10 @@ impl PageDir for BasePageTable {
         }
     }
 
-    fn identity_map_page(&mut self, p: PhysAddr, owner: Owner, page_size: PageSize, flags: usize) {
+    fn identity_map_page(&mut self, p: PhysAddr, page_size: PageSize, flags: usize) {
         self.map_page(
             p,
-            p.align_4k().as_usize().as_virt(),
-            owner,
+            p.align_canon_default().as_usize().as_virt(),
             page_size,
             flags,
         );
@@ -948,31 +1162,23 @@ impl PageDir for BasePageTable {
         owner: Owner,
         page_size: PageSize,
         flags: usize,
-        bit_pattern: BitPattern,
+        bit_pattern: BytePattern,
     ) -> VirtAddr {
         let new_page_frame_base = 
-            iron().frame_alloc_internal_0_2
-                .lock()
-                .as_mut()
-                .unwrap()
+            iron().unwrap().frame_alloc_internal_04
+                .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
                 .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, page_size, owner);
 
         // Looks like we were not able to obtain a page
         if new_page_frame_base.is_none() {
-            return 0usize.as_virt();
+            return ZERO_USIZE.as_virt();
         }
 
         // Map the new page frame to where it was requested
-        self.map_page(new_page_frame_base.unwrap(), v, owner, page_size, flags);
+        self.map_page(new_page_frame_base.unwrap(), v, page_size, flags);
 
         // fill the allocated memory with the bit pattern
-        unsafe {
-            ptr::write_bytes(
-                raw::abracadabra_ptr_mut::<u8, VirtAddr>(v),
-                bit_pattern.into_bits(),
-                page_size.as_usize(),
-            );
-        }
+        raw::memset_aligned(v.as_usize().as_phys(), page_size.as_usize(), bit_pattern.as_usize_pattern());
 
         // Return the virtual address of the new page frame
         v
@@ -985,40 +1191,44 @@ impl PageDir for BasePageTable {
         owner: Owner,
         page_size: PageSize,
         flags: usize,
-        bit_pattern: BitPattern,
+        bit_pattern: BytePattern,
     ) -> Option<VirtAddr> {
-        let size_in_pages = pages::calc_pages_reqd(size, PageSize::Small);
+
+        let size_in_pages = pages::bytes_to_pages(size, MEMORY_DEFAULT_PAGE_SIZE_ENUM);
+        let size_in_bytes = pages::pages_to_bytes(size_in_pages, page_size);
         let mut allocated_pages: usize = 0;
 
-        for i in 0..size_in_pages {
+        let mut va = v.clone();
+
+        for _i in 0..size_in_pages {
             let page_base = 
-                iron().frame_alloc_internal_0_2
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .alloc_frame(MEMORY_DEFAULT_PAGE_USIZE, page_size, owner);
+                iron().unwrap().frame_alloc_internal_04
+                    .lock_rw_spin().as_mut().unwrap().as_mut().unwrap()
+                    .alloc_frame(page_size.as_usize(), page_size, owner);
 
             if page_base.is_some() {
                 allocated_pages += 1;
 
                 self.map_page(
                     page_base.unwrap(),
-                    VirtAddr(v.as_usize() + (i * page_size.as_usize())),
-                    owner,
+                    va.clone(),
                     page_size,
                     flags,
                 );
+
+                va.inner_inc_by_page_size(page_size);
+
             } else {
                 // we need to deallocate and unmap any pages that were allocated and return failure
-                let mut cv: VirtAddr = v;
+                let mut cv: VirtAddr = v.clone();
 
                 for _j in 0..allocated_pages {
                     self.unmap_page(cv, owner, page_size);
-                    iron().frame_alloc_internal_0_2.lock().as_mut().unwrap().dealloc_frame(
+                    iron().unwrap().frame_alloc_internal_04.lock_rw_spin().as_mut().unwrap().as_mut().unwrap().dealloc_frame(
                         self.virt_to_phys(cv),
-                        Owner::Nobody,
+                        owner,
                     );
-                    cv.inner_inc_by_page_size(PageSize::Small);
+                    cv.inner_inc_by_page_size(MEMORY_DEFAULT_PAGE_SIZE_ENUM);
                 }
 
                 return None;
@@ -1026,15 +1236,7 @@ impl PageDir for BasePageTable {
         }
 
         // fill the allocated memory with the bit pattern
-        for _j in 0..allocated_pages {
-            unsafe {
-                ptr::write_bytes(
-                    raw::abracadabra_ptr_mut::<u8, VirtAddr>(v),
-                    bit_pattern.into_bits(),
-                    page_size.as_usize(),
-                );
-            }
-        }
+        raw::memset_aligned(v.as_usize().as_phys(), size_in_bytes, bit_pattern.as_usize_pattern());
         Some(v)
     }
 
@@ -1045,14 +1247,15 @@ impl PageDir for BasePageTable {
         owner: Owner,
         page_size: PageSize,
         flags: usize,
-        bit_pattern: BitPattern,
+        bit_pattern: BytePattern,
     ) -> Option<VirtAddr> {
-        let size_in_pages = pages::calc_pages_reqd(size, page_size);
+        
+        let size_in_pages = pages::bytes_to_pages(size, page_size);
         let page_base = 
-            iron().frame_alloc_internal_0_2
-                .lock()
-                .as_mut()
-                .unwrap()
+            iron().unwrap().frame_alloc_internal_04
+                .lock_rw_spin()
+                .as_mut().unwrap()
+                .as_mut().unwrap()
                 .alloc_frame(size, page_size, owner);
             
         if page_base.is_some() {
@@ -1060,7 +1263,6 @@ impl PageDir for BasePageTable {
                 self.map_page(
                     page_base.unwrap(),
                     VirtAddr(v.as_usize() + (i * page_size.as_usize())),
-                    owner,
                     page_size,
                     flags,
                 );
@@ -1072,7 +1274,7 @@ impl PageDir for BasePageTable {
         // fill the allocated memory with the bit pattern
         unsafe {
             ptr::write_bytes(
-                raw::abracadabra_ptr_mut::<u8, VirtAddr>(v),
+                raw::abracadabra_ptr_mut::<u8, VirtAddr>(v, false),
                 bit_pattern.into_bits(),
                 size,
             );

@@ -1,5 +1,6 @@
-pub use uefi::prelude::*;
-pub use uefi::table::boot::*;
+#![allow(unused_macros)]
+pub use ::uefi::prelude::*;
+pub use ::uefi::table::boot::*;
 
 pub use crate::serial_println;
 
@@ -118,25 +119,30 @@ pub mod bit {
     pub mod bitindex {
         use crate::common::base::*;
 
-        pub fn calc_bitindex_size_in_usize(capacity: usize) -> usize {
+        #[inline(always)]
+        pub const fn calc_bitindex_size_in_usize(capacity: usize) -> usize {
             (capacity + (usize::BITS as usize - 1)) / usize::BITS as usize
         }
 
-        pub fn calc_bitindex_size_in_bytes(capacity: usize) -> usize {
+        #[inline(always)]
+        pub const fn calc_bitindex_size_in_bytes(capacity: usize) -> usize {
             calc_bitindex_size_in_usize(capacity) * MACHINE_UBYTES
         }
 
-        pub fn calc_bitindex_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
-            (calc_bitindex_size_in_bytes(capacity) + page_size.as_usize() - 1)
-                / page_size.as_usize()
+        #[inline(always)]
+        pub const fn calc_bitindex_size_in_pages(capacity: usize, page_size: PageSize) -> usize {
+            (calc_bitindex_size_in_bytes(capacity) + page_size.as_const_usize() - 1)
+                / page_size.as_const_usize()
         }
 
-        pub fn calc_wasted_bytes_in_pages(capacity: usize, page_size: PageSize) -> usize {
-            calc_bitindex_size_in_pages(capacity, page_size) * page_size.as_usize()
+        #[inline(always)]
+        pub const fn calc_wasted_bytes(capacity: usize, page_size: PageSize) -> usize {
+            (calc_bitindex_size_in_pages(capacity, page_size) * page_size.as_const_usize())
                 - calc_bitindex_size_in_bytes(capacity)
         }
 
-        pub fn calc_bitindex(index: usize) -> (usize, usize) {
+        #[inline(always)]
+        pub const fn calc_bitindex_and_bitpos(index: usize) -> (usize, usize) {
             let index_usize = index / MACHINE_UBITS;
             let index_bit = index % MACHINE_UBITS;
             (index_usize, index_bit)
@@ -212,7 +218,12 @@ pub mod factor {
 
 pub mod base {
     use core::mem;
-
+    
+    pub use crate::nebulae::*;
+    pub use crate::sync::*;
+    pub use crate::rng::isaac64::*;
+    pub use crate::permissions::*;
+    pub use crate::bringup::*;
     pub use super::as_usize::*;
     pub use super::bit::*;
     #[allow(unused_imports)] // not sure why this is necessary
@@ -221,20 +232,24 @@ pub mod base {
     pub use super::platform_constants::*;
     pub use super::platform_memory::*;
     pub use super::priority::*;
+    pub use crate::status::*;
     pub use crate::memory::*;
 
     // Bring in the serial port
-    #[cfg(target_arch = "aarch64")]
-    pub use crate::arch::aa64::serial;
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     pub use crate::arch::x86::serial;
-
+    #[cfg(target_arch = "aarch64")]
+    pub use crate::arch::aa64::serial;
+    
     // Re-export the serial port output macros
     pub use crate::serial_print;
     pub use crate::serial_println;
 
-    use crate::genesis::*;
-
+    // Re-export our fuse macros
+    pub use crate::atomic_fuse;
+    pub use crate::atomic_panic_fuse;
+    pub use crate::trip_atomic_fuse;
+    
     // Zero Constants
     pub const ZERO_U8: u8 = 0u8;
     pub const ZERO_U16: u16 = 0u16;
@@ -378,8 +393,8 @@ pub mod base {
     pub const QWORD0_U128: u128 = 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
     pub const QWORD1_U128: u128 = 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000;
 
-    pub const fn make128(high: usize, low: usize) -> u128 {
-        ((high as u128) << 64) | (low as u128)
+    pub const fn make128(hi: usize, lo: usize) -> u128 {
+        ((hi as u128) << 64) | (lo as u128)
     }
 
     pub const fn hi64(value: u128) -> u64 {
@@ -390,58 +405,156 @@ pub mod base {
         (value & QWORD0_U128) as u64
     }
 
+    pub const fn make64(hi: u32, lo: u32) -> u64 {
+        ((hi as u64) << 32) | (lo as u64)
+    }
+
+    pub const fn hi32(value: u64) -> u32 {
+        ((value & DWORD1_U64) >> 32) as u32
+    }
+
+    pub const fn lo32(value: u64) -> u32 {
+        (value & DWORD0_U64) as u32
+    }
+
     pub const MACHINE_UBYTES: usize = mem::size_of::<usize>();
     pub const MACHINE_BYTES: u64 = MACHINE_UBYTES as u64;
 
     pub const MACHINE_BITS: u64 = MACHINE_BYTES << FACTOR_OF_8;
     pub const MACHINE_UBITS: usize = MACHINE_UBYTES << UFACTOR_OF_8;
 
-    pub const KERNEL_STACK_SIZE_SMALL: usize = USIZE_512K;
-    pub const KERNEL_STACK_SIZE_MED: usize = USIZE_4M;
-    pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_16M;
+    pub const NEBULAE: u64 = 0x6464_8888_3232_5225;
+    pub const NEBULAE32: u32 = 0x8888_5225;
 
-    pub const MEMORY_DEFAULT_PAGE_USIZE: usize = USIZE_4K;
+    pub type NebulaeId = u128;
+    pub const NEBULAE_ID_NOBODY: NebulaeId = ZERO_U128;
+    pub const NEBULAE_ID_BASE_SYSTEM: NebulaeId = 2u128;
+
     #[cfg(target_pointer_width = "32")]
-    pub const MEMORY_DEFAULT_PAGE_SIZE: u32 = SIZE_4K as u32;
+    pub const NEBULAE_TEST_PATTERN: usize = NEBULAE32 as usize;
     #[cfg(target_pointer_width = "64")]
-    pub const MEMORY_DEFAULT_PAGE_SIZE: u64 = SIZE_4K;
-
-    // the factor for default page size in bits for shifting ops
-    pub const MEMORY_DEFAULT_SHIFT: usize = UFACTOR_OF_4K;
-
-    pub const PAGE_TABLE_ENTRY_SIZE: usize = core::mem::size_of::<usize>();
-    pub const PAGE_TABLE_MAX_ENTRIES: usize = MEMORY_DEFAULT_PAGE_USIZE / PAGE_TABLE_ENTRY_SIZE;
-
-    pub const FRAME_ALLOCATOR_COALESCE_THRESHOLD_DEALLOC: usize = 100;
-
-    pub const NEBULAE: usize = 0x5225;
+    pub const NEBULAE_TEST_PATTERN: usize = NEBULAE as usize;
     
-    pub fn iron() -> &'static mut Nebulae<'static> {
-        let (gb, _, _) = locate_genesis_block();
-        gb
+    // to create fuses, use these macros:
+    #[macro_export]
+    macro_rules! atomic_fuse {
+        ($fuse_name:ident) => {
+            pub fn $fuse_name(checking_status: bool) -> bool {
+                use core::sync::atomic::{AtomicBool, Ordering};
+
+                static mut FUSE: AtomicBool = AtomicBool::new(false);
+
+                if checking_status {
+                    unsafe { FUSE.load(Ordering::Acquire) }
+                } else {
+                    unsafe { FUSE.store(true, Ordering::SeqCst) };                
+                    true
+                }
+            }
+        };
+    }
+
+    // panics if the fuse has already been blown
+    #[macro_export]
+    macro_rules! atomic_panic_fuse {
+        ($fuse_name:ident) => {
+            pub fn $fuse_name(checking_status: bool) -> bool {
+                use core::sync::atomic::{AtomicBool, Ordering};
+
+                static mut FUSE: AtomicBool = AtomicBool::new(false);
+
+                let res = unsafe { FUSE.load(Ordering::Acquire) };
+
+                if checking_status {
+                    res
+                } else {
+                    if res {
+                        panic!("Iron fuse $fuse_name has already been blown!");
+                    } else {
+                        unsafe { FUSE.store(true, Ordering::SeqCst) };                
+                    }
+                    true
+                }
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! trip_atomic_fuse {
+        ($fuse_name:ident) => {
+            _ = $fuse_name(false);
+        };
+    }
+
+    // fuses to prevent the execution of certain functions:
+    
+    // until we have the memory map
+    atomic_panic_fuse!(memory_map_fuse);
+
+    // until the mem frame structs are ready
+    atomic_panic_fuse!(mem_frame_structs_fuse);
+
+    // until the page info structs are ready
+    atomic_panic_fuse!(page_info_structs_fuse);
+
+    // until the frame allocator is ready
+    atomic_panic_fuse!(frame_alloc_fuse);
+
+    // until the genesis block is ready
+    atomic_panic_fuse!(base_nebulae_genesis_frame_fuse);
+
+    // until the base VAS is ready
+    atomic_panic_fuse!(base_vas_fuse);
+    
+    // until the kernel stack is ready
+    atomic_panic_fuse!(kernel_stack_fuse);
+
+    // until the fiber subsystem is ready
+    atomic_panic_fuse!(fiber_subsystem_fuse);
+
+    // locate & return the main nebulae struct for this instance
+    // currently wraps the base instance
+    pub fn iron() -> Option<&'static mut Nebulae<'static>> {
+        if !base_nebulae_genesis_frame_fuse(true) {
+            return None;
+        }
+
+        base_nebulae_genesis_frame(None)
     }
 
     // numeric alignment functions
     // multiples must be powers of 2
     #[inline(always)]
     pub const fn align_up(value: usize, multiple: usize) -> usize {
+        debug_assert!(multiple.is_power_of_two());
         (value + multiple - 1) & !(multiple - 1)
     }
 
     #[inline(always)]
     pub const fn align_down(value: usize, multiple: usize) -> usize {
+        debug_assert!(multiple.is_power_of_two());
         value - (value % multiple)
     }
 
     #[inline(always)]
-    pub const fn range_contains(range_start: usize, range_size: usize, target_value: usize) -> bool {
-        target_value >= range_start && target_value < range_start + range_size
+    pub const fn range_contains(range_start: usize, range_size: usize, value: usize) -> bool {
+        value >= range_start && value < range_start + range_size
     } 
 }
 
 #[cfg(target_pointer_width = "32")]
 pub mod platform_constants {
     use super::base::*;
+
+    pub const ALIGN_MASK_4K: usize = 0xFFFF_F000;
+    pub const ALIGN_MASK_16K: usize = 0xFFFF_C000;
+    pub const ALIGN_MASK_32K: usize = 0xFFFF_8000;
+    pub const ALIGN_MASK_64K: usize = 0xFFFF_0000;
+    pub const ALIGN_MASK_4M: usize = 0xFFC0_0000;
+
+    pub const KERNEL_STACK_SIZE_SMALL: usize = USIZE_256K;
+    pub const KERNEL_STACK_SIZE_MED: usize = USIZE_2M;
+    pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_4M;
 
     pub const FACTOR_OF_USIZE_BYTES: usize = UFACTOR_OF_4;
     pub const FACTOR_OF_USIZE_BITS: usize = UFACTOR_OF_32;
@@ -453,6 +566,7 @@ pub mod platform_constants {
 pub mod platform_constants {
     use super::base::*;
 
+    // additional constants for 64-bit usize
     pub const BYTE4_USIZE: usize = BYTE4_U64 as usize;
     pub const BYTE5_USIZE: usize = BYTE5_U64 as usize;
     pub const BYTE6_USIZE: usize = BYTE6_U64 as usize;
@@ -496,19 +610,32 @@ pub mod platform_constants {
     pub const USIZE_2E: usize = SIZE_2E as usize;
     pub const USIZE_4E: usize = SIZE_4E as usize;
     pub const USIZE_8E: usize = SIZE_8E as usize;
+    // end additional constants for 64-bit usize
+
+    pub const ALIGN_MASK_4K: usize = 0xFFFF_FFFF_FFFF_F000;
+    pub const ALIGN_MASK_16K: usize = 0xFFFF_FFFF_FFFF_C000;
+    pub const ALIGN_MASK_32K: usize = 0xFFFF_FFFF_FFFF_8000;
+    pub const ALIGN_MASK_64K: usize = 0xFFFF_FFFF_FFFF_0000;
+    pub const ALIGN_MASK_2M: usize = 0xFFFF_FFFF_FFE0_0000;
+    pub const ALIGN_MASK_1G: usize = 0xFFFF_FFFF_C000_0000;
+    
+    pub const KERNEL_STACK_SIZE_SMALL: usize = USIZE_512K;
+    pub const KERNEL_STACK_SIZE_MED: usize = USIZE_4M;
+    pub const KERNEL_STACK_SIZE_LARGE: usize = USIZE_8M;
 
     pub const FACTOR_OF_USIZE_BYTES: usize = UFACTOR_OF_8;
     pub const FACTOR_OF_USIZE_BITS: usize = UFACTOR_OF_64;
 
-    pub const MAX_PHYSICAL_MEMORY: usize = USIZE_4T;
+    pub const MAX_PHYSICAL_MEMORY: usize = USIZE_256T;
 }
 
 #[cfg(target_arch = "x86")]
 pub mod platform_memory {
     use super::base::*;
 
-    pub const ALIGN_MASK_4K: usize = 0xFFFF_F000;
-    pub const ALIGN_MASK_4M: usize = 0xFFC0_0000;
+    pub const ALIGN_CANON_4K: usize = 0xFFFF_F000;
+    pub const ALIGN_CANON_4M: usize = 0xFFC0_0000;
+    pub const MEM_CANONICAL: usize = ALIGN_CANON_4K;
 
     pub const PAGING_PRESENT: usize = ubit::bit(0);
     pub const PAGING_WRITEABLE: usize = ubit::bit(1);
@@ -522,28 +649,16 @@ pub mod platform_memory {
     pub const PAGING_GLOBAL: usize = ubit::bit(8);
     pub const PAGING_NX: usize = ubit::bit(31);
     pub const PAGING_PCID_CR3_MASK: usize = 0x0FFF;
-
-    pub const MEMORY_DEFAULT_PAGE_USIZE: usize = USIZE_4K;
-    pub const MEMORY_DEFAULT_PAGE_SIZE: u32 = SIZE_4K as u32;
-    pub const MEMORY_DEFAULT_SHIFT: usize = UFACTOR_OF_4K;
-
-    pub const PAGING_MEM_MAX: usize = USIZE_U32_MAX as usize;
-    pub const PAGING_MEM_UMAX: usize = USIZE_MAX;
-
-    pub const KERNEL_HEAP_SIZE: usize = USIZE_8M;
-    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
-
-    pub const MEMORY_GENESIS_BASE: usize = 0xb000_0000 + USIZE_64K;
 }
 
 #[cfg(target_arch = "x86_64")]
 pub mod platform_memory {
     use super::base::*;
 
-    pub const MEM_CANONICAL: usize = 0x0000_FFFF_FFFF_FFFF;
-    pub const ALIGN_MASK_4K: usize = 0x000F_FFFF_FFFF_F000;
-    pub const ALIGN_MASK_2M: usize = 0x000F_FFFF_FFE0_0000;
-    pub const ALIGN_MASK_1G: usize = 0x000F_FFFF_C000_0000;
+    pub const ALIGN_CANON_4K: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_FFFF_F000 } else { 0x0000_FFFF_FFFF_F000 };
+    pub const ALIGN_CANON_2M: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_FFE0_0000 } else { 0x0000_FFFF_FFE0_0000 };
+    pub const ALIGN_CANON_1G: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_C000_0000 } else { 0x0000_FFFF_C000_0000 };
+    pub const MEM_CANONICAL: usize = ALIGN_CANON_4K;
 
     pub const PAGING_PRESENT: usize = ubit::bit(0);
     pub const PAGING_WRITEABLE: usize = ubit::bit(1);
@@ -557,14 +672,6 @@ pub mod platform_memory {
     pub const PAGING_GLOBAL: usize = ubit::bit(8);
     pub const PAGING_NX: usize = ubit::bit(63);
     pub const PAGING_PCID_CR3_MASK: usize = 0x0FFF;
-
-    pub const PAGING_MEM_MAX: usize = MAX_PHYSICAL_MEMORY - 1;
-    pub const PAGING_MEM_UMAX: usize = MAX_PHYSICAL_MEMORY as usize - 1;
-
-    pub const KERNEL_HEAP_SIZE: usize = USIZE_32M;
-    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
-
-    pub const MEMORY_GENESIS_BASE: usize = 0xb000_0000 + USIZE_64K;
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -574,15 +681,13 @@ pub mod platform_memory {
 
     // CONSTANTS
 
-    pub const ALIGN_MASK_4K: usize = 0xFFFF_FFFF_FFFF_F000;
-    pub const ALIGN_MASK_16K: usize = 0xFFFF_FFFF_FFFF_C000;
-    pub const ALIGN_MASK_64K: usize = 0xFFFF_FFFF_FFFF_0000;
+    pub const ALIGN_CANON_4K: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_FFFF_F000 } else { 0x0000_FFFF_FFFF_F000 };
+    pub const ALIGN_CANON_2M: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_FFE0_0000 } else { 0x0000_FFFF_FFE0_0000 };
+    pub const ALIGN_CANON_1G: usize = if cfg!(feature = "bits52") { 0x000F_FFFF_C000_0000 } else { 0x0000_FFFF_C000_0000 };
+    pub const MEM_CANONICAL: usize = ALIGN_CANON_4K;
 
     pub const MEMORY_DEFAULT_PAGE_USIZE: usize = USIZE_4K;
-    pub const PAGING_DEFAULT_PAGE_SIZE: usize = SIZE_4K as usize;
-
-    pub const PAGING_MEM_MAX: usize = MAX_PHYSICAL_MEMORY - 1;
-    pub const PAGING_MEM_UMAX: usize = MAX_PHYSICAL_MEMORY as usize - 1;
+    pub const PAGING_DEFAULT_PAGE_SIZE: u64 = MEMORY_DEFAULT_PAGE_USIZE as u64;
 
     pub const PAGE_TABLE_MAX_ENTRIES: usize = 512;
 
@@ -597,12 +702,8 @@ pub mod platform_memory {
     pub const PAGING_IS_PAGE_FRAME: usize = ubit::bit(7);
     pub const PAGING_IS_PAGE_FRAME_BIT: usize = 7;
     pub const PAGING_GLOBAL: usize = ubit::bit(8);
-
-    pub const KERNEL_HEAP_SIZE: usize = USIZE_32M;
-    pub const MEMORY_MAX_WASTE: usize = USIZE_32K;
 }
 
-// STATICS
 pub mod as_usize {
     pub trait AsUsize {
         fn as_usize(&self) -> usize;

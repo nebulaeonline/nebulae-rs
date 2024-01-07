@@ -1,7 +1,18 @@
 use core::arch::asm;
 
 //==========================================================
-// UINT32 aarch_popcount(usize value)
+// VOID aarch_nop()
+//==========================================================
+#[inline(always)]
+pub fn aarch_noop() {
+    unsafe {
+        asm!("nop", 
+        options(nostack, nomem));
+    }
+}
+
+//==========================================================
+// UINTN aarch_popcount(usize value)
 //==========================================================
 #[inline(always)]
 pub fn aarch_popcount(value: usize) -> usize {

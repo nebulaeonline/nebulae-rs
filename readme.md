@@ -2,6 +2,8 @@
 
 ### Current Status
 
+Only building on x64 at the moment. In rough shape.
+
 I've created a separate [dev jounral](dev_journal.md) so I don't pollute this area. I'm trying to be detailed.
 
 ### Project Update
@@ -10,7 +12,9 @@ Well, it's that time again.
 
 This time around nebulae has a new component: a rust kernel (unironically named iron).
 
-This is still in the initial bring-up phase. 32/64-bit Intel chips are done, and aarch64 needs its paging module. I intend to port to risc-v as well, but need to write some support code first.
+This is still in the initial bring-up phase. Basically trying to get a working virtual memory system going before anything else. Of course, supporting multiple architectures necessarily means that I need to keep feature parity as I go along.
+
+Still has a very, very long way to go.
 
 Currently Iron only supports exceptions, not external interrupts (and even then, only on x64 & aarch64), and there's no usermode yet.
 

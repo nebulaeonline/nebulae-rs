@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-baselib = { path = "../baselib", version = "0.1.0" }
+baselib = { path = "../baselib", version = "0.1.0", features = ["serialdbg", "hwrngseed"] }
 uefi = "0.26.0"
+
+# Features
+[features]
+default   = ["serialdbg"]
+serialdbg = []  # whether to send output to serial port in debug mode

@@ -146,6 +146,9 @@ def init_arch(arch, config):
     
     # Use a modern machine, with acceleration if possible.
     "-machine", "pc-q35-2.10,accel=tcg",
+
+    # Set up the CPU
+    "-cpu", "max",
     
     # Set up OVMF
     "-drive", f"if=pflash,format=raw,readonly=on,file={OVMF_BASE / QEMU_OVMF_FW[current_arch_id]}",

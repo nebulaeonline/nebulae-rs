@@ -37,7 +37,7 @@ pub struct MemoryPool {
 impl MemoryPool {
     #[inline(always)]
     pub fn calc_bitmap_size_in_pages(capacity: usize) -> usize {
-        bitindex::calc_bitindex_size_in_pages(capacity, PageSize::Small)
+        bitindex::calc_bitindex_size_in_pages(capacity, MEMORY_DEFAULT_PAGE_SIZE_ENUM)
     }
 
     #[inline(always)]
@@ -52,7 +52,7 @@ impl MemoryPool {
 
     #[inline(always)]
     pub fn calc_size_in_pages(capacity: usize, block_size: usize, page_size: PageSize) -> usize {
-        pages::calc_pages_reqd(capacity * block_size, page_size)
+        pages::bytes_to_pages(capacity * block_size, page_size)
     }
 
     pub fn new(
@@ -77,21 +77,20 @@ impl MemoryPool {
     pub fn init(&mut self) -> Option<VirtAddr> {
         // first try and allocate contiguous memory, then fall back to non-contiguous
         let contiguous = {
-            iron().base_vas_0_5
-                .lock()
-                .as_mut()
-                .unwrap()
-                .base_page_table
-                .as_mut()
-                .unwrap()
-                .alloc_pages_fixed_virtual(
-                    pages::calc_pages_reqd(self.capacity * self.block_size, PageSize::Small),
+            unsafe {
+                let mut vas_lock = iron().unwrap().base_vas_07.lock_rw_spin();
+                let vas = (*vas_lock).as_mut().unwrap();
+                let bpt = vas.base_page_table.unwrap().as_mut().unwrap();                         
+            
+                bpt.alloc_pages_fixed_virtual(
+                    pages::bytes_to_pages(self.capacity * self.block_size, MEMORY_DEFAULT_PAGE_SIZE_ENUM),
                     self.start,
-                    Owner::System,
-                    PageSize::Small,
+                    Owner::Kernel,
+                    MEMORY_DEFAULT_PAGE_SIZE_ENUM,
                     PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                    BitPattern::ZeroZero,
+                    BytePattern::ZeroZero,
                 )
+            }
         };
 
         if contiguous.is_some() {
@@ -101,21 +100,22 @@ impl MemoryPool {
             return contiguous;
         } else {
             let nc = {
-                iron().base_vas_0_5
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .base_page_table
-                    .as_mut()
-                    .unwrap()
-                    .alloc_pages_fixed(
-                        self.capacity * self.block_size,
-                        self.start,
-                        Owner::System,
-                        PageSize::Small,
-                        PAGING_WRITEABLE | PAGING_WRITETHROUGH,
-                        BitPattern::ZeroZero,
+                unsafe {
+                    iron().unwrap().base_vas_07
+                        .lock_rw_spin().as_mut()
+                        .unwrap().as_mut().unwrap()
+                        .base_page_table
+                        .as_mut()
+                        .unwrap().as_mut().unwrap()
+                        .alloc_pages_fixed(
+                            self.capacity * self.block_size,
+                            self.start,
+                            Owner::Kernel,
+                            MEMORY_DEFAULT_PAGE_SIZE_ENUM,
+                            PAGING_WRITEABLE | PAGING_WRITETHROUGH,
+                            BytePattern::ZeroZero,
                     )
+                }
             };
 
             if nc.is_some() {

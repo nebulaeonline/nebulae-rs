@@ -1,6 +1,11 @@
+# Experimental
+experimental/
+
 # Compiled files
 target/
 build/
+
+# Docs - in progress
 docs/
 
 # Dependency directories

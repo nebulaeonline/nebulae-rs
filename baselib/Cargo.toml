@@ -4,7 +4,7 @@ name = "baselib"
 version = "0.1.0"
 edition = "2021"
 
-# Dependencies & features / options / flags
+# Dependencies & their features / options / flags
 [dependencies]
 uefi = "0.26"
 uefi-macros = "0.13"
@@ -12,10 +12,6 @@ qemu-exit = "3.x.x"
 bitfield-struct = "0.5.x"
 volatile = "0.2.x"
 spin = "0.9.x"
-
-[dependencies.num-traits]
-version = "0.2"
-default-features = false
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 uart_16550 = "0.3.x"
@@ -33,3 +29,9 @@ tock-registers = { version = "0.8.x", default-features = false, features = ["reg
 [dependencies.lazy_static]
 version = "1.4.x"
 features = ["spin_no_std"]
+
+# Features
+[features]
+serialdbg = []  # whether to send output to serial port in debug mode
+hwrngseed = []  # seed the kernel rng via hw; default is to ask for 8 random numbers at boot time
+bits52    = []  # whether to support a 52-bit virtual address space
