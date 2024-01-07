@@ -19,3 +19,8 @@ Cargo.toml.orig
 # IDE files
 .idea/
 .vscode/
+
+# Dump files
+*.dmp
+*.dump
+
