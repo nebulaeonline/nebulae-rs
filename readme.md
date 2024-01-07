@@ -4,7 +4,7 @@
 
 Only building on x64 at the moment. In rough shape.
 
-I've created a separate [dev jounral](dev_journal.md) so I don't pollute this area. I'm trying to be detailed.
+I've created a separate [dev journal](dev_journal.md) so I don't pollute this area. I'm trying to be detailed.
 
 ### Project Update
 
